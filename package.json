@@ -1,0 +1,10 @@
+{
+  "name": "webapp",
+  "version": "1.0.0",
+  "description": "Sample Node.js single-page web app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "private": true
+}
