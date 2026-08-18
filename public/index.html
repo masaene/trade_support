@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trade Support Chart</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <svg style="display:none">
+    <symbol id="icon-chart" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+      <path d="M2 12 L6 7 L9 9.5 L14 3"/><path d="M10 3h4v4"/>
+    </symbol>
+    <symbol id="icon-watchlist" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+      <path d="M8 2l1.8 3.8 4.2.5-3 3 0.8 4.2L8 11.5 4.2 13.5 5 9.3l-3-3 4.2-.5z"/>
+    </symbol>
+    <symbol id="icon-settings" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+      <circle cx="8" cy="8" r="2.6"/><path d="M8 1.6v2M8 12.4v2M14.4 8h-2M3.6 8h-2M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4M12.5 12.5l-1.4-1.4M4.9 4.9L3.5 3.5"/>
+    </symbol>
+    <symbol id="icon-arrow-up" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/>
+    </symbol>
+    <symbol id="icon-arrow-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 3v10M3.5 8.5 8 13l4.5-4.5"/>
+    </symbol>
+    <symbol id="icon-close" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+      <path d="M4 4l8 8M12 4l-8 8"/>
+    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 4.5h10M6 4.5V3h4v1.5M4.5 4.5l.6 8.5a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.5"/>
+    </symbol>
+  </svg>
+
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">Trade<span>Support</span></div>
+
+      <div class="search-box">
+        <input id="symbol-input" type="text" autocomplete="off" spellcheck="false"
+               placeholder="銘柄コード・銘柄名で検索 (例: 1605, INPEX)">
+        <div id="symbol-suggestions" class="suggestions hidden"></div>
+      </div>
+
+    </header>
+
+    <div class="app-body">
+      <nav class="nav-rail" id="nav-rail" aria-label="画面切替">
+        <button class="nav-btn active" data-screen="chart"><svg><use href="#icon-chart"/></svg><span>チャート</span></button>
+        <button class="nav-btn" data-screen="watchlist"><svg><use href="#icon-watchlist"/></svg><span>ウォッチリスト</span></button>
+        <button class="nav-btn" data-screen="settings"><svg><use href="#icon-settings"/></svg><span>設定</span></button>
+      </nav>
+
+      <div class="screen-area">
+        <section class="screen active" id="screen-chart">
+          <section class="symbol-header" id="symbol-header">
+            <div class="symbol-title">
+              <span class="symbol-code" id="info-code">&mdash;</span>
+              <span class="symbol-name" id="info-name">銘柄を選択してください</span>
+            </div>
+            <div class="symbol-meta">
+              <span id="info-market" class="pill"></span>
+              <span id="info-sector" class="pill"></span>
+            </div>
+            <div class="symbol-price">
+              <span id="info-close" class="price">&mdash;</span>
+              <span id="info-change" class="change"></span>
+            </div>
+          </section>
+
+          <main class="chart-area">
+            <div class="chart-stack" id="chart-stack">
+              <div id="legend" class="legend hidden"></div>
+              <div id="price-chart" class="chart-pane"></div>
+              <div id="volume-chart" class="chart-pane volume-pane"></div>
+              <div id="empty-state" class="empty-state">
+                <p>左上の検索ボックスから銘柄を選択すると、日足チャートが表示されます。</p>
+              </div>
+              <div id="loading" class="loading hidden">読み込み中...</div>
+            </div>
+
+            <section class="positions-panel" id="positions-panel">
+              <header class="positions-panel__header">
+                <span class="positions-panel__title">建玉パネル</span>
+                <div class="positions-agg positions-agg--flat" id="positions-agg">建玉なし</div>
+                <button class="btn" id="add-lot-btn">＋買い増し</button>
+                <button class="btn positions-collapse-btn" id="positions-collapse-btn" aria-label="建玉パネルの開閉">
+                  <svg><use href="#icon-arrow-down"/></svg>
+                </button>
+              </header>
+
+              <div class="pick-banner hidden" id="pick-banner">
+                <span id="pick-banner-text"></span>
+                <button id="pick-banner-cancel"><svg><use href="#icon-close"/></svg>キャンセル</button>
+              </div>
+
+              <form class="lot-confirm hidden" id="lot-confirm">
+                <div class="lot-confirm__context" id="lot-confirm-context"></div>
+                <div class="lot-confirm__row">
+                  <label>価格<output id="lot-confirm-price"></output>
+                    <button type="button" id="lot-confirm-repick">再選択</button>
+                  </label>
+                </div>
+                <div class="lot-confirm__row" id="lot-confirm-qty-row">
+                  <label>数量(株)<input type="number" id="lot-confirm-qty" min="1" step="1" value="100" required></label>
+                </div>
+                <div class="lot-confirm__row">
+                  <label id="lot-confirm-date-label">購入日<input type="date" id="lot-confirm-date" required></label>
+                </div>
+                <div class="lot-confirm__actions">
+                  <button type="button" class="btn" id="lot-confirm-cancel">キャンセル</button>
+                  <button type="submit" class="btn btn-primary" id="lot-confirm-submit">追加</button>
+                </div>
+              </form>
+
+              <div class="positions-list" id="positions-list"></div>
+              <div class="positions-empty" id="positions-empty">この銘柄の建玉はまだありません。「＋買い増し」から追加できます。</div>
+            </section>
+          </main>
+        </section>
+
+        <section class="screen" id="screen-watchlist">
+          <div class="screen-placeholder">
+            <svg><use href="#icon-watchlist"/></svg>
+            <p>ウォッチリストは準備中です。</p>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-settings">
+          <div class="screen-placeholder">
+            <svg><use href="#icon-settings"/></svg>
+            <p>設定は準備中です。</p>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="statusbar">
+      <span id="status-text">bars/ ディレクトリの銘柄を表示しています</span>
+    </footer>
+
+    <nav class="nav-bottom" id="nav-bottom" aria-label="画面切替">
+      <button class="nav-btn active" data-screen="chart"><svg><use href="#icon-chart"/></svg><span>チャート</span></button>
+      <button class="nav-btn" data-screen="watchlist"><svg><use href="#icon-watchlist"/></svg><span>ウォッチリスト</span></button>
+      <button class="nav-btn" data-screen="settings"><svg><use href="#icon-settings"/></svg><span>設定</span></button>
+    </nav>
+  </div>
+
+  <script>
+    // Catches errors even if the chart library or app.js itself fails to load,
+    // so a broken page shows a visible reason instead of a silent blank/dark screen.
+    (function () {
+      var banner;
+      function show(msg) {
+        if (!banner) {
+          banner = document.createElement('div');
+          banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;' +
+            'background:#f23645;color:#fff;padding:10px 14px;' +
+            'font:12px/1.5 -apple-system,"Hiragino Sans",sans-serif;' +
+            'white-space:pre-wrap;word-break:break-all;max-height:50vh;overflow:auto;';
+          document.body.appendChild(banner);
+        }
+        var line = document.createElement('div');
+        line.textContent = msg;
+        banner.appendChild(line);
+      }
+      window.addEventListener('error', function (e) {
+        show('JSエラー: ' + (e.message || e.error) + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason && e.reason.message ? e.reason.message : e.reason;
+        show('未処理のPromiseエラー: ' + reason);
+      });
+    })();
+  </script>
+  <script src="/vendor/lightweight-charts.standalone.production.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
