@@ -253,7 +253,7 @@ html, body {
 
 .chart-stack {
   position: relative;
-  flex: 1 1 55%;
+  flex: 1 1 45%;
   min-height: 180px;
   display: flex;
   flex-direction: column;
@@ -311,9 +311,117 @@ html, body {
 }
 .loading.hidden { display: none; }
 
+/* --- waterfall panel (選択銘柄の建玉別 評価損益) --- */
+.waterfall-panel {
+  flex: 1 1 22%;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  background: var(--bg-1);
+  overflow: hidden;
+}
+
+.waterfall-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.waterfall-panel__title { font-size: 0.82rem; font-weight: 600; color: var(--text); white-space: nowrap; }
+
+.waterfall-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1.1rem 0.9rem 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.waterfall-chart {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* reserves room below the bars for the #ID axis labels, which are positioned
+   with a negative `bottom` relative to .waterfall-chart's own height */
+.waterfall-axis-spacer { height: 30px; flex-shrink: 0; }
+
+.wf-zero {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--text-muted);
+}
+
+.wf-col {
+  flex: 1;
+  min-width: 34px;
+  height: 100%;
+  position: relative;
+}
+
+.wf-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  min-height: 2px;
+  border-radius: 3px;
+}
+.wf-bar.up { background: linear-gradient(180deg, var(--up), rgba(8,153,129,0.65)); }
+.wf-bar.down { background: linear-gradient(0deg, var(--down), rgba(242,54,69,0.65)); }
+.wf-bar.net { background: linear-gradient(180deg, var(--accent), #163e9e); width: 72%; }
+
+.wf-value {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.wf-value.up { color: #6be0bd; }
+.wf-value.down { color: #ff9c9c; }
+.wf-value.net { color: #cfe0ff; }
+
+.wf-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -22px;
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.wf-col.is-net .wf-label { color: var(--text); font-weight: 700; }
+
+.waterfall-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.waterfall-empty.hidden { display: none; }
+
 /* --- positions panel (建玉パネル) --- */
 .positions-panel {
-  flex: 1 1 45%;
+  flex: 1 1 33%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -512,6 +620,17 @@ html, body {
 .lot-card__main { display: flex; flex-direction: column; gap: 0.15rem; min-width: 8rem; }
 .lot-card__price { font-size: 0.85rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .lot-card__meta { font-size: 0.7rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.lot-card__seq {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.1rem 0.35rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 .lot-badge-settled {
   font-size: 0.65rem;
@@ -521,6 +640,27 @@ html, body {
   color: var(--text-muted);
   border: 1px solid var(--border);
   white-space: nowrap;
+}
+
+/* Distinct from .lot-badge-settled on purpose — an accent outline instead of
+   the muted "already happened" look, so a hypothetical (checkbox-driven)
+   settlement is never mistaken for a real one. */
+.lot-badge-sim {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(41, 98, 255, 0.14);
+  color: #a9c3ff;
+  border: 1px solid var(--accent);
+  white-space: nowrap;
+}
+
+.analysis-sim-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .lot-card__pnl {
@@ -570,6 +710,339 @@ html, body {
   .pnl-arrow--up, .pnl-arrow--down { animation: none; }
 }
 
+/* --- analysis screen (分析): symbol pulldown + price-prediction slider +
+   breakeven visualization, all reusing the .positions-panel/.lot-card/
+   .positions-agg components from the chart screen where possible --- */
+.analysis-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.symbol-select {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  font-family: var(--font);
+  max-width: 260px;
+}
+.symbol-select:focus { border-color: var(--accent); outline: none; }
+
+.analysis-empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  text-align: center;
+  padding: 0 1.5rem;
+}
+.analysis-empty-state.hidden { display: none; }
+
+.analysis-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.analysis-content.hidden { display: none; }
+
+.analysis-slider {
+  padding: 0.9rem 1.1rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.analysis-slider__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.analysis-slider__label { font-size: 0.82rem; color: var(--text-muted); }
+.analysis-slider__row-right { display: flex; align-items: baseline; gap: 0.6rem; }
+.analysis-slider__jump-btn { border-radius: 6px; font-size: 0.7rem; padding: 0.25rem 0.55rem; }
+.analysis-slider__value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Symmetric top/bottom padding gives the SMA markers (above) and the
+   current-price marker (below) equal room to point in at the track. */
+.analysis-slider__track-wrap { position: relative; padding: 13px 0; }
+
+#analysis-price-slider {
+  width: 100%;
+  height: 20px;
+  display: block;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+#analysis-price-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+#analysis-price-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+#analysis-price-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #cfe0ff;
+}
+#analysis-price-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #cfe0ff;
+}
+
+/* SMA markers point down into the track from above; the current-price marker
+   points up into the track from below (the same glyph, just mirrored) — the
+   opposite sides keep the two kinds of reference point from being confused
+   with each other. The breakeven marker stays a full-height neutral line,
+   distinct in both shape and color from any of the SMA colors. */
+.analysis-sma-markers {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 13px;
+  pointer-events: none;
+}
+.analysis-sma-marker {
+  position: absolute;
+  bottom: 0;
+  width: 10px;
+  height: 8px;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 1px var(--bg-1)) drop-shadow(0 0 1px var(--bg-1));
+}
+
+.analysis-current-marker {
+  position: absolute;
+  bottom: 0;
+  width: 10px;
+  height: 8px;
+  color: var(--accent);
+  transform: translateX(-50%) rotate(180deg);
+  pointer-events: none;
+}
+.analysis-current-marker svg { width: 100%; height: 100%; display: block; }
+.analysis-current-marker.hidden { display: none; }
+
+.analysis-breakeven-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.analysis-breakeven-marker.hidden { display: none; }
+
+.analysis-sma-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  margin-top: 0.5rem;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+.analysis-sma-legend__item::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 0.3rem;
+}
+
+.analysis-slider__minmax {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.4rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-breakeven-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.8rem 1.1rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.analysis-breakeven-card__label { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+.analysis-breakeven-card__value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f0b90b;
+  font-variant-numeric: tabular-nums;
+}
+.analysis-breakeven-card--na .analysis-breakeven-card__value {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+#analysis-breakeven-jump { margin-left: auto; border-radius: 6px; }
+#analysis-breakeven-jump:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* forced onto their own row below the main label/value/jump-button line —
+   only relevant once the partial-settlement simulator has a checked lot */
+.analysis-breakeven-card__locked {
+  flex: 1 1 100%;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.analysis-breakeven-card__locked.up { color: #6be0bd; }
+.analysis-breakeven-card__locked.down { color: #ff9c9c; }
+.analysis-breakeven-card__locked.hidden { display: none; }
+
+#analysis-sim-reset {
+  margin-left: auto;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.6rem;
+}
+#analysis-sim-reset.hidden { display: none; }
+
+/* --- stats screen (統計): multiple independent statistical sections, each
+   with its own chart — stacked vertically and scrollable as a whole, since
+   several full-height charts can't all fit on screen at once --- */
+.analysis-toolbar .loading { margin-left: auto; position: static; background: none; font-size: 0.8rem; }
+
+.stats-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.stats-content.hidden { display: none; }
+
+.stats-section {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.stats-section:last-child { border-bottom: none; }
+
+.stats-section__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.1rem;
+  background: var(--bg-2);
+}
+.stats-section__title { font-size: 0.82rem; font-weight: 600; color: var(--text); white-space: nowrap; }
+#stats-sma-picker { margin-left: auto; }
+#stats-var-picker { margin-left: 0.75rem; }
+
+.stats-window-input {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.stats-window-input input {
+  width: 4.2em;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font);
+}
+.stats-window-input input:focus { border-color: var(--accent); outline: none; }
+
+.stats-summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.7rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.stats-summary__label { font-size: 0.82rem; color: var(--text-muted); }
+.stats-summary__label--gap { margin-left: 0.6rem; }
+.stats-summary__value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.stats-summary__value.down { color: #ff9c9c; }
+
+.stats-chart-wrap {
+  position: relative;
+  height: 220px;
+  background: var(--bg-1);
+}
+.stats-chart-wrap .chart-pane { width: 100%; height: 100%; }
+
+.stats-legend {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 0.9rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.stats-legend__item { position: relative; padding-left: 1rem; }
+.stats-legend__item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.7rem;
+  height: 2px;
+}
+.stats-legend__item--var::before { background: var(--accent); }
+.stats-legend__item--cvar::before { background: #ff9c9c; }
+
 .statusbar {
   padding: 0.35rem 1rem;
   background: var(--bg-1);
@@ -611,6 +1084,12 @@ html, body {
   .volume-pane { height: 80px; }
   #price-chart { min-height: 140px; } /* keep the chart visible even if fixed chrome eats most of a short viewport */
 
+  /* three stacked panels don't all fit comfortably on a phone screen, so the
+     waterfall keeps a compact fixed height instead of taking a flex share */
+  .waterfall-panel { flex: 0 0 128px; min-height: 0; }
+  .waterfall-wrap { padding: 0.5rem 0.6rem 0; }
+  .wf-label { font-size: 0.62rem; }
+
   .legend {
     left: 8px;
     right: 8px;
@@ -650,6 +1129,11 @@ html, body {
   .positions-panel.collapsed .positions-empty { display: none; }
   .positions-panel__title { display: none; } /* reclaim header space; the aggregate badge already conveys context */
   #add-lot-btn { padding: 0.4rem 0.55rem; font-size: 0.72rem; }
+
+  .analysis-toolbar { flex-wrap: wrap; padding: 0.5rem 0.75rem; }
+  .symbol-select { flex: 1 1 100%; max-width: none; font-size: 16px; } /* 16px avoids iOS Safari auto-zoom on focus */
+  .analysis-breakeven-card { flex-wrap: wrap; margin: 0.6rem 0.75rem; padding: 0.5rem 0.7rem; }
+  #analysis-breakeven-jump { margin-left: 0; flex: 1 1 100%; }
 }
 
 /* Very short viewport (landscape phone, or on-screen keyboard eating most of
@@ -664,5 +1148,6 @@ html, body {
   .nav-bottom .nav-btn span { display: none; }
   .nav-bottom .nav-btn { padding: 0.3rem 0.2rem; }
   .chart-stack { min-height: 120px; }
+  .waterfall-panel { flex: 0 0 96px; }
   .positions-panel:not(.collapsed) .positions-list { max-height: 100px; }
 }

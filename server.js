@@ -160,6 +160,34 @@ function genLotId() {
   return `l_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Short, human-readable sequence number shown on the lot card and used as the
+// waterfall chart's X-axis label — distinct from the opaque storage `id`.
+function nextSeq(lots) {
+  let max = 0;
+  for (const l of lots) if (typeof l.seq === 'number' && l.seq > max) max = l.seq;
+  return max + 1;
+}
+
+// --- settings: user-adjustable UI parameters (e.g. the stats screen's SMA
+// period / VaR confidence / VaR window), persisted as one flat JSON file so
+// they're restored on the next visit instead of resetting to defaults ---
+
+const SETTINGS_PATH = path.join(ROOT_DIR, 'settings.json');
+const SETTINGS_SECTION_RE = /^[a-zA-Z0-9_-]+$/;
+
+function loadSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return {};
+    throw err;
+  }
+}
+
+function saveSettings(settings) {
+  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function validatePriceFields(body, priceKey, dateKey) {
@@ -212,6 +240,35 @@ const server = http.createServer((req, res) => {
       sendJson(res, 500, { error: err.message });
     }
     return;
+  }
+
+  if (pathname === '/api/settings') {
+    if (req.method !== 'GET') return methodNotAllowed(res);
+    try {
+      sendJson(res, 200, loadSettings());
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  const settingsSectionMatch = pathname.match(/^\/api\/settings\/([^/]+)$/);
+  if (settingsSectionMatch) {
+    const [, section] = settingsSectionMatch;
+    if (!SETTINGS_SECTION_RE.test(section)) {
+      sendJson(res, 400, { error: 'invalid section' });
+      return;
+    }
+    if (req.method === 'PUT') {
+      readJsonBody(req).then((body) => {
+        const settings = loadSettings();
+        settings[section] = body;
+        saveSettings(settings);
+        sendJson(res, 200, { [section]: body });
+      }).catch((err) => sendJson(res, err.status || 400, { error: err.message }));
+      return;
+    }
+    return methodNotAllowed(res);
   }
 
   if (pathname === '/api/positions') {
@@ -291,8 +348,10 @@ const server = http.createServer((req, res) => {
           return sendJson(res, 400, { error: 'invalid quantity' });
         }
         const now = new Date().toISOString();
+        const lots = loadPositions(code);
         const lot = {
           id: genLotId(),
+          seq: nextSeq(lots),
           code,
           buyDate: body.buyDate,
           buyPrice: Number(body.buyPrice),
@@ -303,7 +362,6 @@ const server = http.createServer((req, res) => {
           createdAt: now,
           updatedAt: now,
         };
-        const lots = loadPositions(code);
         lots.push(lot);
         savePositions(code, lots);
         sendJson(res, 201, { lot });

@@ -9,13 +9,20 @@
 <body>
   <svg style="display:none">
     <symbol id="icon-chart" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
-      <path d="M2 12 L6 7 L9 9.5 L14 3"/><path d="M10 3h4v4"/>
+      <path d="M2.5 14V9M6.5 14V5M10.5 14V7.5M14 14V2.5"/>
     </symbol>
     <symbol id="icon-watchlist" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
       <path d="M8 2l1.8 3.8 4.2.5-3 3 0.8 4.2L8 11.5 4.2 13.5 5 9.3l-3-3 4.2-.5z"/>
     </symbol>
     <symbol id="icon-settings" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
       <circle cx="8" cy="8" r="2.6"/><path d="M8 1.6v2M8 12.4v2M14.4 8h-2M3.6 8h-2M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4M12.5 12.5l-1.4-1.4M4.9 4.9L3.5 3.5"/>
+    </symbol>
+    <symbol id="icon-flask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.2 1.5h3.6M6.7 1.5v3.4L3 12.4a1.6 1.6 0 0 0 1.5 2.3h7a1.6 1.6 0 0 0 1.5-2.3L9.3 4.9V1.5"/>
+      <path d="M4.3 10.2h7.4"/>
+    </symbol>
+    <symbol id="icon-stats" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+      <path d="M1.5 13V11M5 13V7M8 13V3M11 13V7M14.5 13V11"/>
     </symbol>
     <symbol id="icon-arrow-up" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
       <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/>
@@ -28,6 +35,9 @@
     </symbol>
     <symbol id="icon-trash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
       <path d="M3 4.5h10M6 4.5V3h4v1.5M4.5 4.5l.6 8.5a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.5"/>
+    </symbol>
+    <symbol id="icon-marker-tri" viewBox="0 0 12 10" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M6 8.5 1.5 1.7h9z"/>
     </symbol>
   </svg>
 
@@ -46,6 +56,8 @@
     <div class="app-body">
       <nav class="nav-rail" id="nav-rail" aria-label="画面切替">
         <button class="nav-btn active" data-screen="chart"><svg><use href="#icon-chart"/></svg><span>チャート</span></button>
+        <button class="nav-btn" data-screen="analysis"><svg><use href="#icon-flask"/></svg><span>シミュレーション</span></button>
+        <button class="nav-btn" data-screen="stats"><svg><use href="#icon-stats"/></svg><span>統計</span></button>
         <button class="nav-btn" data-screen="watchlist"><svg><use href="#icon-watchlist"/></svg><span>ウォッチリスト</span></button>
         <button class="nav-btn" data-screen="settings"><svg><use href="#icon-settings"/></svg><span>設定</span></button>
       </nav>
@@ -77,6 +89,18 @@
               </div>
               <div id="loading" class="loading hidden">読み込み中...</div>
             </div>
+
+            <section class="waterfall-panel" id="waterfall-panel">
+              <header class="waterfall-panel__header">
+                <span class="waterfall-panel__title">建玉別 評価損益</span>
+                <div class="positions-agg positions-agg--flat" id="waterfall-total">建玉なし</div>
+              </header>
+              <div class="waterfall-wrap" id="waterfall-wrap">
+                <div class="waterfall-chart" id="waterfall-chart"></div>
+                <div class="waterfall-axis-spacer"></div>
+              </div>
+              <div class="waterfall-empty hidden" id="waterfall-empty">この銘柄の建玉はまだありません。</div>
+            </section>
 
             <section class="positions-panel" id="positions-panel">
               <header class="positions-panel__header">
@@ -118,6 +142,141 @@
           </main>
         </section>
 
+        <section class="screen" id="screen-analysis">
+          <header class="analysis-toolbar">
+            <select id="analysis-symbol-select" class="symbol-select">
+              <option value="">銘柄を選択</option>
+            </select>
+            <span class="symbol-code" id="analysis-info-code"></span>
+            <span class="symbol-name" id="analysis-info-name"></span>
+          </header>
+
+          <div id="analysis-empty" class="analysis-empty-state">
+            <p>上のプルダウンから銘柄を選択すると、保有建玉の価格シミュレーションができます。</p>
+          </div>
+
+          <div id="analysis-content" class="analysis-content hidden">
+            <section class="analysis-slider">
+              <div class="analysis-slider__row">
+                <span class="analysis-slider__label">想定株価</span>
+                <div class="analysis-slider__row-right">
+                  <button class="btn analysis-slider__jump-btn" id="analysis-jump-current">現在値にジャンプ</button>
+                  <span class="analysis-slider__value" id="analysis-price-value">&mdash;円</span>
+                </div>
+              </div>
+              <div class="analysis-slider__track-wrap">
+                <input type="range" id="analysis-price-slider" step="any">
+                <div class="analysis-sma-markers" id="analysis-sma-markers"></div>
+                <div class="analysis-breakeven-marker hidden" id="analysis-breakeven-marker"></div>
+                <div class="analysis-current-marker hidden" id="analysis-current-marker" title="現在値">
+                  <svg><use href="#icon-marker-tri"/></svg>
+                </div>
+              </div>
+              <div class="analysis-slider__minmax">
+                <span id="analysis-slider-min"></span>
+                <span id="analysis-slider-max"></span>
+              </div>
+              <div class="analysis-sma-legend" id="analysis-sma-legend"></div>
+            </section>
+
+            <div class="analysis-breakeven-card" id="analysis-breakeven-card">
+              <span class="analysis-breakeven-card__label" id="analysis-breakeven-label">損益分岐点</span>
+              <span class="analysis-breakeven-card__value" id="analysis-breakeven-value">&mdash;</span>
+              <button class="btn" id="analysis-breakeven-jump">この価格にジャンプ</button>
+              <span class="analysis-breakeven-card__locked hidden" id="analysis-locked-profit"></span>
+              <button class="btn hidden" id="analysis-sim-reset">シミュレーションをリセット</button>
+            </div>
+
+            <section class="positions-panel" id="analysis-lots-panel">
+              <header class="positions-panel__header">
+                <span class="positions-panel__title">建玉一覧（読み取り専用）</span>
+                <div class="positions-agg positions-agg--flat" id="analysis-agg">建玉なし</div>
+              </header>
+              <div class="positions-list" id="analysis-lots-list"></div>
+              <div class="positions-empty hidden" id="analysis-lots-empty">この銘柄の建玉はまだありません。</div>
+            </section>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-stats">
+          <header class="analysis-toolbar">
+            <select id="stats-symbol-select" class="symbol-select">
+              <option value="">銘柄を選択</option>
+            </select>
+            <span class="symbol-code" id="stats-info-code"></span>
+            <span class="symbol-name" id="stats-info-name"></span>
+            <div class="loading hidden" id="stats-loading">読み込み中...</div>
+          </header>
+
+          <div id="stats-empty" class="analysis-empty-state">
+            <p>上のプルダウンから銘柄を選択すると、統計指標を確認できます。</p>
+          </div>
+
+          <div id="stats-content" class="stats-content hidden">
+            <section class="stats-section">
+              <header class="stats-section__header">
+                <span class="stats-section__title">標準偏差（対SMA）</span>
+                <div class="btn-group" id="stats-sma-picker">
+                  <button class="btn" type="button" data-period="5">SMA5</button>
+                  <button class="btn active" type="button" data-period="25">SMA25</button>
+                  <button class="btn" type="button" data-period="75">SMA75</button>
+                  <button class="btn" type="button" data-period="200">SMA200</button>
+                </div>
+              </header>
+              <div class="stats-summary">
+                <span class="stats-summary__label">最新の標準偏差（対SMA<span id="stats-current-period">25</span>）</span>
+                <span class="stats-summary__value" id="stats-current-stddev">&mdash;円</span>
+              </div>
+              <div class="stats-chart-wrap" id="stats-chart-wrap">
+                <div id="stats-chart" class="chart-pane"></div>
+              </div>
+            </section>
+
+            <section class="stats-section">
+              <header class="stats-section__header">
+                <span class="stats-section__title">ドローダウン</span>
+              </header>
+              <div class="stats-summary">
+                <span class="stats-summary__label">最大ドローダウン</span>
+                <span class="stats-summary__value down" id="stats-max-dd">&mdash;</span>
+                <span class="stats-summary__label stats-summary__label--gap">現在のドローダウン</span>
+                <span class="stats-summary__value down" id="stats-current-dd">&mdash;</span>
+              </div>
+              <div class="stats-chart-wrap" id="stats-dd-chart-wrap">
+                <div id="stats-dd-chart" class="chart-pane"></div>
+              </div>
+            </section>
+
+            <section class="stats-section">
+              <header class="stats-section__header">
+                <span class="stats-section__title">ヒストリカルVaR / CVaR</span>
+                <label class="stats-window-input">
+                  ローリング窓
+                  <input type="number" id="stats-var-window" min="30" max="500" step="5" value="150">日
+                </label>
+                <div class="btn-group" id="stats-var-picker">
+                  <button class="btn" type="button" data-confidence="0.9">90%</button>
+                  <button class="btn active" type="button" data-confidence="0.95">95%</button>
+                  <button class="btn" type="button" data-confidence="0.99">99%</button>
+                </div>
+              </header>
+              <div class="stats-summary">
+                <span class="stats-summary__label">VaR<span id="stats-var-confidence-a">95</span>%</span>
+                <span class="stats-summary__value down" id="stats-current-var">&mdash;</span>
+                <span class="stats-summary__label stats-summary__label--gap">CVaR<span id="stats-var-confidence-b">95</span>%</span>
+                <span class="stats-summary__value down" id="stats-current-cvar">&mdash;</span>
+              </div>
+              <div class="stats-chart-wrap" id="stats-var-chart-wrap">
+                <div id="stats-var-chart" class="chart-pane"></div>
+                <div class="stats-legend">
+                  <span class="stats-legend__item stats-legend__item--var">VaR</span>
+                  <span class="stats-legend__item stats-legend__item--cvar">CVaR</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
         <section class="screen" id="screen-watchlist">
           <div class="screen-placeholder">
             <svg><use href="#icon-watchlist"/></svg>
@@ -140,6 +299,8 @@
 
     <nav class="nav-bottom" id="nav-bottom" aria-label="画面切替">
       <button class="nav-btn active" data-screen="chart"><svg><use href="#icon-chart"/></svg><span>チャート</span></button>
+      <button class="nav-btn" data-screen="analysis"><svg><use href="#icon-flask"/></svg><span>シミュレーション</span></button>
+      <button class="nav-btn" data-screen="stats"><svg><use href="#icon-stats"/></svg><span>統計</span></button>
       <button class="nav-btn" data-screen="watchlist"><svg><use href="#icon-watchlist"/></svg><span>ウォッチリスト</span></button>
       <button class="nav-btn" data-screen="settings"><svg><use href="#icon-settings"/></svg><span>設定</span></button>
     </nav>
