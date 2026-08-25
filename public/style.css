@@ -31,32 +31,13 @@ html, body {
   height: 100svh; /* stays stable when the on-screen keyboard opens, unlike 100dvh */
 }
 
-/* --- top bar --- */
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.6rem 1rem;
-  background: var(--bg-1);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.brand {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--text);
-  white-space: nowrap;
-}
-.brand span { color: var(--accent); }
-
 .search-box {
   position: relative;
   flex: 1;
   max-width: 420px;
 }
 
-#symbol-input {
+.search-box input {
   width: 100%;
   padding: 0.5rem 0.75rem;
   background: var(--bg-2);
@@ -66,8 +47,8 @@ html, body {
   font-size: 0.9rem;
   outline: none;
 }
-#symbol-input:focus { border-color: var(--accent); }
-#symbol-input::placeholder { color: var(--text-muted); }
+.search-box input:focus { border-color: var(--accent); }
+.search-box input::placeholder { color: var(--text-muted); }
 
 .suggestions {
   position: absolute;
@@ -115,6 +96,23 @@ html, body {
 .suggestion-item .s-holding--down { background: rgba(242,54,69,0.18); color: #ff9c9c; }
 .suggestion-item .s-meta { margin-left: auto; color: var(--text-muted); font-size: 0.75rem; }
 .suggestions .no-match { padding: 0.6rem 0.75rem; color: var(--text-muted); font-size: 0.85rem; }
+
+/* 業種 group header within the suggestions list — sticky so it stays
+   visible while scrolling through a large sector's symbols. */
+.suggestion-group__label {
+  position: sticky;
+  top: 0;
+  padding: 0.35rem 0.75rem;
+  background: var(--bg-2);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  z-index: 1;
+}
+.suggestion-group:first-child .suggestion-group__label { border-top: none; }
 
 .btn-group {
   display: flex;
@@ -182,19 +180,6 @@ html, body {
 
 .screen { display: none; flex: 1; min-height: 0; flex-direction: column; }
 .screen.active { display: flex; }
-
-.screen-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  background: var(--bg-1);
-}
-.screen-placeholder svg { width: 32px; height: 32px; opacity: 0.5; }
 
 .nav-bottom { display: none; } /* shown on mobile only, see media query below */
 
@@ -363,8 +348,13 @@ html, body {
   border-top: 1px dashed var(--text-muted);
 }
 
+/* Fixed-ish width (grow:0) so a handful of lots stay compact and left-aligned
+   instead of stretching to fill the panel — columns only shrink (down to
+   min-width) once there are enough lots that they'd otherwise overflow the
+   available width; .waterfall-wrap's overflow-x still catches anything past
+   that floor. */
 .wf-col {
-  flex: 1;
+  flex: 0 1 60px;
   min-width: 34px;
   height: 100%;
   position: relative;
@@ -380,7 +370,17 @@ html, body {
 }
 .wf-bar.up { background: linear-gradient(180deg, var(--up), rgba(8,153,129,0.65)); }
 .wf-bar.down { background: linear-gradient(0deg, var(--down), rgba(242,54,69,0.65)); }
-.wf-bar.net { background: linear-gradient(180deg, var(--accent), #163e9e); width: 72%; }
+/* The total column uses the same red/green as individual lots (it reflects
+   the actual overall total, not a neutral "summary" color) but is widened,
+   fully opaque, lighter, and outlined so it never reads as just another lot
+   bar in the same color. */
+.wf-bar.net {
+  width: 72%;
+  border: 2px solid;
+  filter: brightness(1.35) saturate(1.15);
+}
+.wf-bar.up.net { background: linear-gradient(180deg, #0bcf9f, var(--up)); border-color: #6be0bd; }
+.wf-bar.down.net { background: linear-gradient(0deg, #ff4f60, var(--down)); border-color: #ff9c9c; }
 
 .wf-value {
   position: absolute;
@@ -393,7 +393,7 @@ html, body {
 }
 .wf-value.up { color: #6be0bd; }
 .wf-value.down { color: #ff9c9c; }
-.wf-value.net { color: #cfe0ff; }
+.wf-value.net { font-size: 0.76rem; font-weight: 800; }
 
 .wf-label {
   position: absolute;
@@ -723,18 +723,6 @@ html, body {
   flex-shrink: 0;
 }
 
-.symbol-select {
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--text);
-  padding: 0.4rem 0.6rem;
-  font-size: 0.85rem;
-  font-family: var(--font);
-  max-width: 260px;
-}
-.symbol-select:focus { border-color: var(--accent); outline: none; }
-
 .analysis-empty-state {
   flex: 1;
   display: flex;
@@ -757,7 +745,7 @@ html, body {
 .analysis-content.hidden { display: none; }
 
 .analysis-slider {
-  padding: 0.9rem 1.1rem 0.7rem;
+  padding: 0.5rem 1.1rem 0.4rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -766,42 +754,53 @@ html, body {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.3rem;
 }
-.analysis-slider__label { font-size: 0.82rem; color: var(--text-muted); }
-.analysis-slider__row-right { display: flex; align-items: baseline; gap: 0.6rem; }
-.analysis-slider__jump-btn { border-radius: 6px; font-size: 0.7rem; padding: 0.25rem 0.55rem; }
+.analysis-slider__label { font-size: 0.74rem; color: var(--text-muted); }
+.analysis-slider__row-right { display: flex; align-items: baseline; gap: 0.5rem; }
+.analysis-slider__jump-btn { border-radius: 6px; font-size: 0.66rem; padding: 0.2rem 0.5rem; }
 .analysis-slider__value {
-  font-size: 1.3rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
-/* Symmetric top/bottom padding gives the SMA markers (above) and the
-   current-price marker (below) equal room to point in at the track. */
-.analysis-slider__track-wrap { position: relative; padding: 13px 0; }
+.analysis-slider__track-wrap { position: relative; padding: 4px 0; }
 
 #analysis-price-slider {
   width: 100%;
   height: 20px;
   display: block;
+  margin: 0; /* browsers default type=range to ~2px margin, which silently
+    shifted the real slider box off from .analysis-slider__track-wrap (the
+    box the marker overlays' left:% is computed against) by that same 2px —
+    the actual root cause of the marker/thumb misalignment. */
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
   cursor: pointer;
 }
+/* box-shadow instead of border for the track/thumb ring below: a real
+   `border` on a native range track/thumb has inconsistent box-sizing
+   behavior across engines (the UA shadow box doesn't reliably honor the
+   page's `* { box-sizing: border-box }` reset), which silently changes the
+   thumb's true rendered width/center — exactly the kind of mismatch that
+   made marker alignment (app.js's priceToTrackLeft) drift by a few px on
+   some browsers. box-shadow paints the same ring without touching layout
+   geometry at all, so the thumb's box is unambiguously the width/height
+   set below, on every engine. */
 #analysis-price-slider::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 999px;
   background: var(--bg-3);
-  border: 1px solid var(--border);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 #analysis-price-slider::-moz-range-track {
   height: 6px;
   border-radius: 999px;
   background: var(--bg-3);
-  border: 1px solid var(--border);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 #analysis-price-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -811,135 +810,95 @@ html, body {
   margin-top: -6px;
   border-radius: 50%;
   background: var(--accent);
-  border: 2px solid #cfe0ff;
+  box-shadow: 0 0 0 2px #cfe0ff;
 }
+/* Same 16px as the -webkit-slider-thumb above — the marker-alignment math
+   in app.js (priceToTrackLeft) assumes one fixed thumb width across
+   engines, so this has to stay in sync with it. */
 #analysis-price-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--accent);
-  border: 2px solid #cfe0ff;
-}
-
-/* SMA markers point down into the track from above; the current-price marker
-   points up into the track from below (the same glyph, just mirrored) — the
-   opposite sides keep the two kinds of reference point from being confused
-   with each other. The breakeven marker stays a full-height neutral line,
-   distinct in both shape and color from any of the SMA colors. */
-.analysis-sma-markers {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 13px;
-  pointer-events: none;
-}
-.analysis-sma-marker {
-  position: absolute;
-  bottom: 0;
-  width: 10px;
-  height: 8px;
-  transform: translateX(-50%);
-  filter: drop-shadow(0 0 1px var(--bg-1)) drop-shadow(0 0 1px var(--bg-1));
-}
-
-.analysis-current-marker {
-  position: absolute;
-  bottom: 0;
-  width: 10px;
-  height: 8px;
-  color: var(--accent);
-  transform: translateX(-50%) rotate(180deg);
-  pointer-events: none;
-}
-.analysis-current-marker svg { width: 100%; height: 100%; display: block; }
-.analysis-current-marker.hidden { display: none; }
-
-.analysis-breakeven-marker {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--text);
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-.analysis-breakeven-marker.hidden { display: none; }
-
-.analysis-sma-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.15rem 0.9rem;
-  margin-top: 0.5rem;
-  font-size: 0.68rem;
-  font-variant-numeric: tabular-nums;
-}
-.analysis-sma-legend__item::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  margin-right: 0.3rem;
+  box-shadow: 0 0 0 2px #cfe0ff;
 }
 
 .analysis-slider__minmax {
   display: flex;
   justify-content: space-between;
-  margin-top: 0.4rem;
-  font-size: 0.68rem;
+  margin-top: 0.15rem;
+  font-size: 0.66rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.analysis-breakeven-card {
+/* --- price reference points (価格の目安): SMA/σ/VaR・CVaR/最大ドローダウン/
+   損益分岐点, sorted by distance from the current price. Same-family points
+   are bundled into one bordered block of compact single-line rows (dot —
+   label — diverging bar — price/%) instead of a full row/card each; every
+   row is clickable and jumps the simulator slider to that price. ---- */
+.refpts { border-top: 1px solid var(--border); flex-shrink: 0; }
+.refpts__header { display: flex; align-items: center; padding: 0.6rem 1.1rem; background: var(--bg-2); }
+.refpts__title { font-size: 0.82rem; font-weight: 600; color: var(--text); white-space: nowrap; }
+
+.refpts__note {
+  padding: 0.5rem 1.1rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.refpts__note:empty { display: none; }
+.refpts__note--mild { color: var(--text-muted); }
+.refpts__note--moderate { color: #f0b90b; }
+.refpts__note--severe { color: var(--down); font-weight: 600; }
+
+.refpts__sim-banner {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  margin: 0.8rem 1.1rem;
-  padding: 0.6rem 0.9rem;
-  background: var(--bg-2);
+  gap: 0.6rem;
+  padding: 0.5rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.refpts__sim-banner.hidden { display: none; }
+.refpts__locked { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.refpts__locked.up { color: #6be0bd; }
+.refpts__locked.down { color: #ff9c9c; }
+#analysis-sim-reset { margin-left: auto; border-radius: 6px; font-size: 0.72rem; padding: 0.3rem 0.6rem; }
+
+.refpts__list { padding: 0.7rem 1.1rem 0.2rem; }
+.refpts-empty { padding: 0.8rem 0; color: var(--text-muted); font-size: 0.8rem; }
+.refpts__hint { padding: 0 1.1rem 0.8rem; font-size: 0.68rem; color: var(--text-muted); }
+
+.refpt-block + .refpt-block { margin-top: 0.55rem; }
+.refpt-group {
   border: 1px solid var(--border);
   border-radius: 8px;
-  flex-shrink: 0;
+  padding: 0.5rem 0.6rem 0.15rem;
+  background: rgba(255, 255, 255, 0.015);
 }
-.analysis-breakeven-card__label { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
-.analysis-breakeven-card__value {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #f0b90b;
-  font-variant-numeric: tabular-nums;
-}
-.analysis-breakeven-card--na .analysis-breakeven-card__value {
-  font-size: 0.82rem;
-  font-weight: 400;
-  color: var(--text-muted);
-}
-#analysis-breakeven-jump { margin-left: auto; border-radius: 6px; }
-#analysis-breakeven-jump:disabled { opacity: 0.4; cursor: not-allowed; }
+.refpt-group__title { font-size: 0.62rem; color: var(--text-muted); letter-spacing: 0.02em; margin-bottom: 0.3rem; }
 
-/* forced onto their own row below the main label/value/jump-button line —
-   only relevant once the partial-settlement simulator has a checked lot */
-.analysis-breakeven-card__locked {
-  flex: 1 1 100%;
-  font-size: 0.8rem;
+.refpt-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.32rem 0.15rem; border-radius: 5px; cursor: pointer; }
+.refpt-row:hover { background: var(--bg-3); }
+.refpt-group .refpt-row + .refpt-row { border-top: 1px solid var(--border); }
+.refpt-block--solo .refpt-row { padding: 0.32rem 0.15rem; }
+.refpt-block--solo + .refpt-block--solo { border-top: 1px solid var(--border); margin-top: 0; padding-top: 0.1rem; }
+
+.refpt-row__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.refpt-row__label { font-size: 0.76rem; color: var(--text); flex: 0 0 76px; white-space: nowrap; }
+.refpt-row__track { position: relative; flex: 1; min-width: 0; height: 8px; background: var(--bg-3); border-radius: 999px; overflow: hidden; }
+.refpt-row__zero { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--border); }
+.refpt-row__bar { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.refpt-row__value {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
+  white-space: nowrap;
+  text-align: right;
 }
-.analysis-breakeven-card__locked.up { color: #6be0bd; }
-.analysis-breakeven-card__locked.down { color: #ff9c9c; }
-.analysis-breakeven-card__locked.hidden { display: none; }
-
-#analysis-sim-reset {
-  margin-left: auto;
-  border-radius: 6px;
-  font-size: 0.72rem;
-  padding: 0.3rem 0.6rem;
-}
-#analysis-sim-reset.hidden { display: none; }
+.refpt-row__value small { font-size: 0.64rem; font-weight: 400; color: var(--text-muted); margin-left: 0.3rem; }
 
 /* --- stats screen (統計): multiple independent statistical sections, each
    with its own chart — stacked vertically and scrollable as a whole, since
@@ -1043,6 +1002,392 @@ html, body {
 .stats-legend__item--var::before { background: var(--accent); }
 .stats-legend__item--cvar::before { background: #ff9c9c; }
 
+/* Sorted diverging bars, ranked by |correlation| — the same "zero-centered
+   horizontal bar" idiom as the P&L waterfall/tornado-style views elsewhere
+   in this app, so magnitude (bar length) and direction (color/side) both
+   read at a glance across many rows. */
+.stats-corr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.7rem 1.1rem 1rem;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+/* Name gets its own full-width line — a fixed-width single-line column was
+   clipping most real company names — with the value/n pinned to the right
+   of that same line, and the bar on the line below. */
+.corr-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 0;
+}
+.corr-row + .corr-row { border-top: 1px solid var(--border); }
+
+.corr-row__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.corr-row__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Small on purpose — this is supporting context for the row, not the point
+   of it. Same industry as the base symbol stays muted (unsurprising that
+   same-sector stocks move together); a different sector is called out in
+   the accent color, since spotting cross-industry correlation is the whole
+   reason this column exists. */
+.corr-row__sector {
+  flex-shrink: 0;
+  max-width: 6.5em;
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.corr-row__sector--cross { color: #cfe0ff; }
+
+.corr-row__track {
+  position: relative;
+  height: 14px;
+  background: var(--bg-3);
+  border-radius: 3px;
+}
+.corr-row__bar {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 3px;
+}
+
+/* Strength tiers (|r| < .25 / < .5 / < .75 / >= .75) stay on the same hue
+   (168° = the app's up-green, 355° = its down-red), stepping saturation up
+   sharply tier by tier — weak correlations are dim and desaturated (nearly
+   gray), strong ones are fully saturated and end exactly on the brand
+   --up/--down color, so "vividness" tracks strength monotonically. Lightness
+   climbs only slightly across tiers so a weak bar never reads as brighter
+   than a strong one (the earlier version's low-alpha rgba on this near-black
+   panel let every tier blend into the background almost the same way). */
+.corr-row__bar.up.tier-0 { background: hsl(168, 14%, 26%); }
+.corr-row__bar.up.tier-1 { background: linear-gradient(90deg, hsl(168, 34%, 28%), hsl(168, 42%, 30%)); }
+.corr-row__bar.up.tier-2 { background: linear-gradient(90deg, hsl(168, 58%, 30%), hsl(168, 72%, 31%)); }
+.corr-row__bar.up.tier-3 { background: linear-gradient(90deg, hsl(168, 85%, 31%), var(--up)); }
+
+.corr-row__bar.down.tier-0 { background: hsl(355, 14%, 42%); }
+.corr-row__bar.down.tier-1 { background: linear-gradient(270deg, hsl(355, 34%, 46%), hsl(355, 42%, 50%)); }
+.corr-row__bar.down.tier-2 { background: linear-gradient(270deg, hsl(355, 58%, 52%), hsl(355, 72%, 55%)); }
+.corr-row__bar.down.tier-3 { background: linear-gradient(270deg, hsl(355, 85%, 56%), var(--down)); }
+
+.corr-row__value {
+  flex-shrink: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+.corr-row__value.up { color: #6be0bd; }
+.corr-row__value.down { color: #ff9c9c; }
+
+.corr-row__n {
+  flex-shrink: 0;
+  width: 3.4em;
+  text-align: right;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stats-corr-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.stats-corr-empty.hidden { display: none; }
+
+/* ---- screener (銘柄選定) ---- */
+.screener-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.6rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.screener-filter-row:last-child { border-bottom: none; }
+.screener-filter-row.hidden { display: none; }
+.screener-filter-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.screener-filter-row input[type="number"],
+.screener-filter-row select {
+  width: 4.5em;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font);
+}
+.screener-filter-row select { width: auto; }
+.screener-filter-row input:focus,
+.screener-filter-row select:focus { border-color: var(--accent); outline: none; }
+
+.screener-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.screener-row { cursor: pointer; }
+.screener-row:hover { background: var(--bg-2); }
+
+.screener-badge {
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--bg-3);
+  color: var(--text-muted);
+}
+.screener-badge--po { background: var(--up); color: #06281f; }
+.screener-badge--up { color: #6be0bd; }
+.screener-badge--down { color: #ff9c9c; }
+
+.screener-row__metrics {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- portfolio (ポートフォリオ): the landing screen's summary row + galaxy ---- */
+.stats-summary.hidden { display: none; }
+.pf-pnl-profit { color: #6be0bd; }
+.pf-pnl-loss { color: #ff9c9c; }
+
+.pf-treemap-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  padding: 0.75rem 1.1rem 1rem;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 25% 20%, rgba(124, 95, 224, 0.07), transparent 55%),
+    radial-gradient(ellipse at 80% 85%, rgba(38, 98, 255, 0.05), transparent 50%);
+}
+.pf-treemap-wrap.hidden { display: none; }
+.pf-canvas { display: block; width: 100%; height: 100%; cursor: default; }
+
+.pf-legend {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.9rem;
+  padding: 0.35rem 0.6rem;
+  background: rgba(19, 23, 34, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* ---- dividends (配当): a single arc gauge for the holdings' combined
+   monthly-wage rate, plus a heatmap of per-symbol tiles below it. Gold accent
+   throughout (not up/down green/red) since this isn't P&L. ---- */
+.dividends-note {
+  margin: 0;
+  padding: 0.7rem 1.1rem 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.div-gauge-card {
+  margin: 0.9rem 1.1rem;
+  padding: 1.1rem 1.1rem 1rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.div-gauge-card__label { font-size: 0.72rem; color: var(--text-muted); }
+.div-gauge-card__rate {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: #f0b90b;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.div-gauge-card__rate small { font-size: 0.95rem; font-weight: 600; color: var(--text-muted); margin-left: 0.2rem; }
+.div-gauge-card__rate-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.1rem 0.6rem; }
+.div-gauge-card__annual { font-size: 0.74rem; color: var(--text-muted); white-space: nowrap; }
+.div-gauge-card__annual b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; margin-left: 0.3rem; }
+.div-gauge-card__foot { font-size: 0.74rem; color: var(--text-muted); margin-top: 0.4rem; }
+.div-gauge-card__foot b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.div-gauge-arc-wrap { display: flex; align-items: center; gap: 1.1rem; margin-top: 0.4rem; }
+.div-gauge-arc { position: relative; width: 110px; height: 110px; flex-shrink: 0; }
+.div-gauge-arc svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.div-gauge-arc__bg { fill: none; stroke: var(--bg-3); stroke-width: 10; }
+.div-gauge-arc__fill { fill: none; stroke: url(#div-arc-grad); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 0.2s linear; }
+.div-gauge-arc__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.div-gauge-arc__pct { font-size: 1rem; font-weight: 700; color: #f0b90b; font-variant-numeric: tabular-nums; }
+.div-gauge-arc__pct-label { font-size: 0.6rem; color: var(--text-muted); margin-top: 1px; }
+.div-gauge-arc__side { flex: 1; min-width: 0; }
+
+.div-heatmap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0.9rem 1.1rem 1rem;
+}
+.heat-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0.55rem 0.6rem 0.5rem;
+  min-width: 116px;
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.heat-tile__fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+}
+.heat-tile__top { position: relative; z-index: 1; }
+.heat-tile__code { font-size: 0.78rem; font-weight: 700; }
+.heat-tile__name {
+  display: block;
+  font-size: 0.66rem;
+  margin-top: 1px;
+  opacity: 0.82;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.heat-tile__basis {
+  position: relative;
+  z-index: 1;
+  align-self: flex-start;
+  font-size: 0.6rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  white-space: nowrap;
+}
+.heat-tile__bottom { position: relative; z-index: 1; }
+.heat-tile__rate { font-size: 0.9rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.heat-tile__accrued { font-size: 0.62rem; margin-top: 1px; font-variant-numeric: tabular-nums; opacity: 0.85; }
+
+.stats-section__hint { margin-left: auto; font-size: 0.68rem; color: var(--text-muted); white-space: nowrap; }
+
+/* ---- dividend concentration (配当の偏り): a Lorenz curve of monthly-wage
+   share across dividend-purpose holdings, plus its Gini coefficient — how
+   evenly spread the dividend income is across symbols, to guide rebalancing
+   toward more equal position sizes. ---- */
+.lorenz-card { padding: 0.9rem 1.1rem 1rem; display: flex; flex-direction: column; align-items: center; }
+.lorenz-card__gini { font-size: 1.6rem; font-weight: 700; color: #f0b90b; font-variant-numeric: tabular-nums; align-self: flex-start; }
+.lorenz-card__chart-wrap { width: 100%; max-width: 260px; margin-top: 0.4rem; }
+.lorenz-card__chart-wrap svg { width: 100%; height: auto; display: block; }
+.lorenz-card__legend { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.66rem; color: var(--text-muted); align-self: flex-start; }
+.lorenz-card__legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.lorenz-card__swatch { width: 14px; height: 3px; border-radius: 2px; }
+.lorenz-card__swatch--diag { background: var(--text-muted); }
+.lorenz-card__swatch--curve { background: #f0b90b; }
+.lorenz-card__hint { font-size: 0.66rem; color: var(--text-muted); line-height: 1.55; margin: 0.7rem 0 0; align-self: flex-start; }
+
+.dividends-register-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.75rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.dividends-register-form .search-box { flex: 1 1 220px; }
+.dividends-register-form__amount {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.dividends-register-form__amount input {
+  width: 6em;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font);
+}
+.dividends-register-form__amount input:focus { border-color: var(--accent); outline: none; }
+#dividends-register-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.dividends-registered-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.6rem 1.1rem 1rem;
+}
+.dividends-registered-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0; }
+.dividends-registered-row + .dividends-registered-row { border-top: 1px solid var(--border); }
+.dividends-registered-row__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dividends-registered-row__amount {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dividends-registered-row__delete { flex-shrink: 0; font-size: 0.72rem; padding: 0.2rem 0.55rem; }
+.dividends-registered-empty { padding: 0.6rem 0; color: var(--text-muted); font-size: 0.85rem; }
+
 .statusbar {
   padding: 0.35rem 1rem;
   background: var(--bg-1);
@@ -1054,22 +1399,7 @@ html, body {
 
 /* --- mobile / narrow viewport --- */
 @media (max-width: 640px) {
-  .topbar {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-  }
-  .brand { order: 2; font-size: 0.9rem; }
-
-  /* Search box takes its own full-width row, brand sits alone on the second —
-     keeps the topbar at 2 rows so the chart area doesn't get squeezed out on
-     short mobile viewports. */
-  .search-box {
-    order: 1;
-    flex: 1 1 100%;
-    max-width: none;
-  }
-  #symbol-input { font-size: 16px; } /* prevents iOS Safari auto-zoom on focus */
+  .search-box input { font-size: 16px; } /* prevents iOS Safari auto-zoom on focus */
 
   .btn { padding: 0.4rem 0.55rem; font-size: 0.74rem; }
 
@@ -1078,6 +1408,9 @@ html, body {
     gap: 0.2rem 1rem;
     padding: 0.4rem 0.75rem;
   }
+  /* Search box takes its own full-width row, so the code/name/price info
+     that follows doesn't get squeezed out on narrow viewports. */
+  .symbol-header .search-box { flex: 1 1 100%; max-width: none; order: -1; }
   .symbol-price { margin-left: auto; }
   .symbol-name { font-size: 0.95rem; }
 
@@ -1131,16 +1464,13 @@ html, body {
   #add-lot-btn { padding: 0.4rem 0.55rem; font-size: 0.72rem; }
 
   .analysis-toolbar { flex-wrap: wrap; padding: 0.5rem 0.75rem; }
-  .symbol-select { flex: 1 1 100%; max-width: none; font-size: 16px; } /* 16px avoids iOS Safari auto-zoom on focus */
-  .analysis-breakeven-card { flex-wrap: wrap; margin: 0.6rem 0.75rem; padding: 0.5rem 0.7rem; }
-  #analysis-breakeven-jump { margin-left: 0; flex: 1 1 100%; }
+  .analysis-toolbar .search-box { flex: 1 1 100%; max-width: none; }
 }
 
 /* Very short viewport (landscape phone, or on-screen keyboard eating most of
    the screen): trim fixed chrome further so the chart pane keeps a usable
    minimum instead of being squeezed away. */
 @media (max-width: 640px) and (max-height: 480px) {
-  .topbar { padding: 0.3rem 0.6rem; gap: 0.3rem; }
   .symbol-header { padding: 0.25rem 0.6rem; gap: 0.15rem 0.75rem; }
   .symbol-price { display: none; }
   .volume-pane { height: 56px; }

@@ -11,12 +11,6 @@
     <symbol id="icon-chart" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
       <path d="M2.5 14V9M6.5 14V5M10.5 14V7.5M14 14V2.5"/>
     </symbol>
-    <symbol id="icon-watchlist" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
-      <path d="M8 2l1.8 3.8 4.2.5-3 3 0.8 4.2L8 11.5 4.2 13.5 5 9.3l-3-3 4.2-.5z"/>
-    </symbol>
-    <symbol id="icon-settings" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
-      <circle cx="8" cy="8" r="2.6"/><path d="M8 1.6v2M8 12.4v2M14.4 8h-2M3.6 8h-2M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4M12.5 12.5l-1.4-1.4M4.9 4.9L3.5 3.5"/>
-    </symbol>
     <symbol id="icon-flask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
       <path d="M6.2 1.5h3.6M6.7 1.5v3.4L3 12.4a1.6 1.6 0 0 0 1.5 2.3h7a1.6 1.6 0 0 0 1.5-2.3L9.3 4.9V1.5"/>
       <path d="M4.3 10.2h7.4"/>
@@ -36,35 +30,68 @@
     <symbol id="icon-trash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
       <path d="M3 4.5h10M6 4.5V3h4v1.5M4.5 4.5l.6 8.5a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.5"/>
     </symbol>
-    <symbol id="icon-marker-tri" viewBox="0 0 12 10" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round">
-      <path d="M6 8.5 1.5 1.7h9z"/>
+    <symbol id="icon-screener" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 2.5h12L9.5 8.2v4.3L6.5 14V8.2z"/>
+    </symbol>
+    <symbol id="icon-portfolio" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+      <rect x="1.5" y="1.5" width="7" height="6" rx="0.8"/>
+      <rect x="9.5" y="1.5" width="5" height="4" rx="0.8"/>
+      <rect x="9.5" y="6.5" width="5" height="8" rx="0.8"/>
+      <rect x="1.5" y="8.5" width="7" height="6" rx="0.8"/>
+    </symbol>
+    <symbol id="icon-dividend" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="8" cy="8.2" r="6.3"/>
+      <path d="M5.2 4.8 8 8.4m2.8-3.6L8 8.4M8 8.4v3.4M6 9.6h4M6 10.9h4"/>
     </symbol>
   </svg>
 
   <div id="app">
-    <header class="topbar">
-      <div class="brand">Trade<span>Support</span></div>
-
-      <div class="search-box">
-        <input id="symbol-input" type="text" autocomplete="off" spellcheck="false"
-               placeholder="銘柄コード・銘柄名で検索 (例: 1605, INPEX)">
-        <div id="symbol-suggestions" class="suggestions hidden"></div>
-      </div>
-
-    </header>
-
     <div class="app-body">
       <nav class="nav-rail" id="nav-rail" aria-label="画面切替">
-        <button class="nav-btn active" data-screen="chart"><svg><use href="#icon-chart"/></svg><span>チャート</span></button>
+        <button class="nav-btn active" data-screen="portfolio"><svg><use href="#icon-portfolio"/></svg><span>ポートフォリオ</span></button>
+        <button class="nav-btn" data-screen="chart"><svg><use href="#icon-chart"/></svg><span>チャート</span></button>
         <button class="nav-btn" data-screen="analysis"><svg><use href="#icon-flask"/></svg><span>シミュレーション</span></button>
         <button class="nav-btn" data-screen="stats"><svg><use href="#icon-stats"/></svg><span>統計</span></button>
-        <button class="nav-btn" data-screen="watchlist"><svg><use href="#icon-watchlist"/></svg><span>ウォッチリスト</span></button>
-        <button class="nav-btn" data-screen="settings"><svg><use href="#icon-settings"/></svg><span>設定</span></button>
+        <button class="nav-btn" data-screen="screener"><svg><use href="#icon-screener"/></svg><span>銘柄選定</span></button>
+        <button class="nav-btn" data-screen="dividends"><svg><use href="#icon-dividend"/></svg><span>配当</span></button>
       </nav>
 
       <div class="screen-area">
-        <section class="screen active" id="screen-chart">
+        <section class="screen active" id="screen-portfolio">
+          <header class="analysis-toolbar">
+            <span class="symbol-name">ポートフォリオ</span>
+          </header>
+
+          <div id="portfolio-summary" class="stats-summary">
+            <span class="stats-summary__label">総評価額</span>
+            <span class="stats-summary__value" id="pf-total-value">&mdash;円</span>
+            <span class="stats-summary__label stats-summary__label--gap">総取得原価</span>
+            <span class="stats-summary__value" id="pf-total-cost">&mdash;円</span>
+            <span class="stats-summary__label stats-summary__label--gap">評価損益</span>
+            <span class="stats-summary__value" id="pf-total-pnl">&mdash;</span>
+            <span class="stats-summary__label stats-summary__label--gap">保有銘柄数</span>
+            <span class="stats-summary__value" id="pf-symbol-count">&mdash;</span>
+            <span class="stats-summary__label stats-summary__label--gap">建玉数</span>
+            <span class="stats-summary__value" id="pf-lot-count">&mdash;</span>
+          </div>
+
+          <div id="portfolio-treemap-wrap" class="pf-treemap-wrap">
+            <canvas id="portfolio-canvas" class="pf-canvas"></canvas>
+            <div class="pf-legend">銀河系 = 業種　／　サイズ = 評価額　／　色 = 評価損益率</div>
+          </div>
+
+          <div id="portfolio-empty" class="analysis-empty-state hidden">
+            <p>保有中の建玉がありません。チャート画面から銘柄を選び、建玉を追加してください。</p>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-chart">
           <section class="symbol-header" id="symbol-header">
+            <div class="search-box">
+              <input id="symbol-input" type="text" autocomplete="off" spellcheck="false"
+                     placeholder="銘柄コード・銘柄名で検索 (例: 1605, INPEX)">
+              <div id="symbol-suggestions" class="suggestions hidden"></div>
+            </div>
             <div class="symbol-title">
               <span class="symbol-code" id="info-code">&mdash;</span>
               <span class="symbol-name" id="info-name">銘柄を選択してください</span>
@@ -144,15 +171,15 @@
 
         <section class="screen" id="screen-analysis">
           <header class="analysis-toolbar">
-            <select id="analysis-symbol-select" class="symbol-select">
-              <option value="">銘柄を選択</option>
-            </select>
-            <span class="symbol-code" id="analysis-info-code"></span>
-            <span class="symbol-name" id="analysis-info-name"></span>
+            <div class="search-box">
+              <input id="analysis-symbol-input" type="text" autocomplete="off" spellcheck="false"
+                     placeholder="銘柄コード・銘柄名で検索 (例: 1605, INPEX)">
+              <div id="analysis-symbol-suggestions" class="suggestions hidden"></div>
+            </div>
           </header>
 
           <div id="analysis-empty" class="analysis-empty-state">
-            <p>上のプルダウンから銘柄を選択すると、保有建玉の価格シミュレーションができます。</p>
+            <p>上の検索ボックスから銘柄を選択すると、保有建玉の価格シミュレーションができます。</p>
           </div>
 
           <div id="analysis-content" class="analysis-content hidden">
@@ -166,26 +193,25 @@
               </div>
               <div class="analysis-slider__track-wrap">
                 <input type="range" id="analysis-price-slider" step="any">
-                <div class="analysis-sma-markers" id="analysis-sma-markers"></div>
-                <div class="analysis-breakeven-marker hidden" id="analysis-breakeven-marker"></div>
-                <div class="analysis-current-marker hidden" id="analysis-current-marker" title="現在値">
-                  <svg><use href="#icon-marker-tri"/></svg>
-                </div>
               </div>
               <div class="analysis-slider__minmax">
                 <span id="analysis-slider-min"></span>
                 <span id="analysis-slider-max"></span>
               </div>
-              <div class="analysis-sma-legend" id="analysis-sma-legend"></div>
             </section>
 
-            <div class="analysis-breakeven-card" id="analysis-breakeven-card">
-              <span class="analysis-breakeven-card__label" id="analysis-breakeven-label">損益分岐点</span>
-              <span class="analysis-breakeven-card__value" id="analysis-breakeven-value">&mdash;</span>
-              <button class="btn" id="analysis-breakeven-jump">この価格にジャンプ</button>
-              <span class="analysis-breakeven-card__locked hidden" id="analysis-locked-profit"></span>
-              <button class="btn hidden" id="analysis-sim-reset">シミュレーションをリセット</button>
-            </div>
+            <section class="refpts">
+              <header class="refpts__header">
+                <span class="refpts__title">価格の目安（現在値からの乖離順）</span>
+              </header>
+              <div class="refpts__note" id="analysis-dd-comparison"></div>
+              <div class="refpts__sim-banner hidden" id="refpts-sim-banner">
+                <span class="refpts__locked" id="analysis-locked-profit"></span>
+                <button class="btn" id="analysis-sim-reset">シミュレーションをリセット</button>
+              </div>
+              <div class="refpts__list" id="refpts-list"></div>
+              <div class="refpts__hint">行をタップすると、想定株価をその価格にジャンプできます。</div>
+            </section>
 
             <section class="positions-panel" id="analysis-lots-panel">
               <header class="positions-panel__header">
@@ -200,16 +226,19 @@
 
         <section class="screen" id="screen-stats">
           <header class="analysis-toolbar">
-            <select id="stats-symbol-select" class="symbol-select">
-              <option value="">銘柄を選択</option>
-            </select>
+            <div class="search-box">
+              <input id="stats-symbol-input" type="text" autocomplete="off" spellcheck="false"
+                     placeholder="銘柄コード・銘柄名で検索 (例: 1605, INPEX)">
+              <div id="stats-symbol-suggestions" class="suggestions hidden"></div>
+            </div>
             <span class="symbol-code" id="stats-info-code"></span>
             <span class="symbol-name" id="stats-info-name"></span>
+            <span class="pill" id="stats-info-sector"></span>
             <div class="loading hidden" id="stats-loading">読み込み中...</div>
           </header>
 
           <div id="stats-empty" class="analysis-empty-state">
-            <p>上のプルダウンから銘柄を選択すると、統計指標を確認できます。</p>
+            <p>上の検索ボックスから銘柄を選択すると、統計指標を確認できます。</p>
           </div>
 
           <div id="stats-content" class="stats-content hidden">
@@ -274,20 +303,179 @@
                 </div>
               </div>
             </section>
+
+            <section class="stats-section">
+              <header class="stats-section__header">
+                <span class="stats-section__title">他銘柄との相関ランキング（日次リターン）</span>
+              </header>
+              <div id="stats-corr-empty" class="stats-corr-empty hidden">比較できる他銘柄のデータがありません。</div>
+              <div id="stats-corr-list" class="stats-corr-list"></div>
+            </section>
           </div>
         </section>
 
-        <section class="screen" id="screen-watchlist">
-          <div class="screen-placeholder">
-            <svg><use href="#icon-watchlist"/></svg>
-            <p>ウォッチリストは準備中です。</p>
+        <section class="screen" id="screen-screener">
+          <header class="analysis-toolbar">
+            <span class="symbol-name">銘柄選定</span>
+            <button class="btn" id="screener-refresh-btn">更新</button>
+            <div class="loading hidden" id="screener-loading">読み込み中...</div>
+          </header>
+
+          <div id="screener-content" class="stats-content">
+            <section class="stats-section">
+              <header class="stats-section__header">
+                <span class="stats-section__title">トレンド条件</span>
+                <div class="btn-group" id="screener-trend-mode-picker">
+                  <button class="btn active" type="button" data-mode="po">パーフェクトオーダー</button>
+                  <button class="btn" type="button" data-mode="slope">SMA上向き</button>
+                </div>
+              </header>
+              <div class="screener-filter-row" id="screener-po-row">
+                <label>最低スコア（0〜4、4=完全パーフェクトオーダー）
+                  <input type="number" id="screener-order-score" min="1" max="4" step="1" value="4">
+                </label>
+              </div>
+              <div class="screener-filter-row hidden" id="screener-slope-row">
+                <label>対象SMA</label>
+                <div class="btn-group" id="screener-slope-period-picker">
+                  <button class="btn" type="button" data-period="5">SMA5</button>
+                  <button class="btn active" type="button" data-period="25">SMA25</button>
+                  <button class="btn" type="button" data-period="75">SMA75</button>
+                  <button class="btn" type="button" data-period="200">SMA200</button>
+                </div>
+                <label>最小傾き（%/日）
+                  <input type="number" id="screener-min-slope" min="0" step="0.01" value="0.05">
+                </label>
+              </div>
+            </section>
+
+            <section class="stats-section">
+              <header class="stats-section__header">
+                <span class="stats-section__title">急騰・ボラティリティ条件</span>
+              </header>
+              <div class="screener-filter-row">
+                <label>除外: 直近
+                  <select id="screener-surge-days">
+                    <option value="5" selected>5営業日</option>
+                    <option value="20">20営業日</option>
+                  </select>
+                  の騰落率が
+                  <input type="number" id="screener-surge-pct" min="1" step="1" value="15">
+                  %を超える銘柄
+                </label>
+              </div>
+              <div class="screener-filter-row">
+                <label>ボラティリティ比の上限（直近20日÷直近60日の標準偏差）
+                  <input type="number" id="screener-vol-ratio-max" min="1" step="0.1" value="1.5">
+                </label>
+              </div>
+            </section>
+
+            <section class="stats-section">
+              <header class="stats-section__header">
+                <span class="stats-section__title">該当銘柄</span>
+                <span class="screener-count" id="screener-count"></span>
+              </header>
+              <div id="screener-empty" class="stats-corr-empty hidden">条件に一致する銘柄がありません。フィルター条件を緩めてください。</div>
+              <div id="screener-list" class="stats-corr-list"></div>
+            </section>
+          </div>
+
+          <div id="screener-load-error" class="analysis-empty-state hidden">
+            <p>銘柄データの取得に失敗しました。</p>
           </div>
         </section>
 
-        <section class="screen" id="screen-settings">
-          <div class="screen-placeholder">
-            <svg><use href="#icon-settings"/></svg>
-            <p>設定は準備中です。</p>
+        <section class="screen" id="screen-dividends">
+          <header class="analysis-toolbar">
+            <span class="symbol-name">配当</span>
+            <button class="btn" id="dividends-refresh-btn">更新</button>
+          </header>
+
+          <div id="dividends-content" class="stats-content">
+            <p class="dividends-note">
+              配当単価は配当実績・予想データ（jquants_api.pyで取得したbars/配下の財務サマリー）から自動算出した暫定値です。
+              保有株数はポートフォリオ等の取引用建玉とは別に、この画面で配当目的として登録した株数を使用します。
+            </p>
+            <div class="div-gauge-card">
+              <div class="div-gauge-card__label">保有銘柄トータル 月給換算</div>
+              <div class="div-gauge-arc-wrap">
+                <div class="div-gauge-arc">
+                  <svg width="132" height="132" viewBox="0 0 132 132">
+                    <defs>
+                      <linearGradient id="div-arc-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#7a5c0c" />
+                        <stop offset="70%" stop-color="#f0b90b" />
+                        <stop offset="100%" stop-color="#ffdd6b" />
+                      </linearGradient>
+                    </defs>
+                    <circle class="div-gauge-arc__bg" cx="66" cy="66" r="56" />
+                    <circle class="div-gauge-arc__fill" id="div-arc-circle" cx="66" cy="66" r="56"
+                      stroke-dasharray="351.858" stroke-dashoffset="351.858" />
+                  </svg>
+                  <div class="div-gauge-arc__center">
+                    <div class="div-gauge-arc__pct" id="div-arc-pct">0%</div>
+                    <div class="div-gauge-arc__pct-label">今月</div>
+                  </div>
+                </div>
+                <div class="div-gauge-arc__side">
+                  <div class="div-gauge-card__rate-row">
+                    <div class="div-gauge-card__rate" id="div-total-monthly">&mdash;円<small>/月</small></div>
+                    <div class="div-gauge-card__annual">年間<b id="div-total-annual">&mdash;円</b></div>
+                  </div>
+                  <div class="div-gauge-card__foot"><span>推定累計 <b id="div-total-accrued">0円</b></span></div>
+                  <div class="div-gauge-card__foot"><span id="div-symbol-count">&mdash;</span></div>
+                </div>
+              </div>
+            </div>
+
+            <section class="stats-section">
+              <header class="stats-section__header">
+                <span class="stats-section__title">保有銘柄ヒートマップ</span>
+                <span class="stats-section__hint">面積・濃さ＝月給の大きさ</span>
+              </header>
+              <div id="dividends-list" class="div-heatmap"></div>
+              <div id="dividends-empty" class="stats-corr-empty hidden"></div>
+            </section>
+
+            <section class="stats-section" id="dividends-lorenz">
+              <header class="stats-section__header">
+                <span class="stats-section__title">配当の偏り</span>
+                <span class="stats-section__hint">ジニ係数：0=均等 / 1=1銘柄に集中</span>
+              </header>
+              <div class="lorenz-card">
+                <div class="lorenz-card__gini" id="lorenz-gini">&mdash;</div>
+                <div class="lorenz-card__chart-wrap">
+                  <svg id="lorenz-svg" viewBox="0 0 220 220" preserveAspectRatio="xMidYMid meet"></svg>
+                </div>
+                <div class="lorenz-card__legend">
+                  <span class="lorenz-card__legend-item"><span class="lorenz-card__swatch lorenz-card__swatch--diag"></span>完全に均等な場合</span>
+                  <span class="lorenz-card__legend-item"><span class="lorenz-card__swatch lorenz-card__swatch--curve"></span>実際の累積配分</span>
+                </div>
+                <p class="lorenz-card__hint">
+                  横軸＝銘柄数の累積割合（月給換算が少ない順）、縦軸＝配当額の累積割合。対角線に近いほど均等、
+                  右下に膨らむほど一部の銘柄に偏っています。
+                </p>
+              </div>
+            </section>
+
+            <section class="stats-section" id="dividends-register">
+              <header class="stats-section__header">
+                <span class="stats-section__title">配当目的の保有銘柄を登録</span>
+              </header>
+              <form class="dividends-register-form" id="dividends-register-form">
+                <div class="search-box" id="dividends-symbol-search">
+                  <input id="dividends-symbol-input" type="text" autocomplete="off" spellcheck="false"
+                         placeholder="銘柄コード・銘柄名で検索">
+                  <div id="dividends-symbol-suggestions" class="suggestions hidden"></div>
+                </div>
+                <label class="dividends-register-form__amount">保有株数
+                  <input type="number" id="dividends-quantity-input" min="1" step="1" placeholder="例: 100" required>
+                </label>
+                <button type="submit" class="btn btn-primary" id="dividends-register-btn" disabled>登録</button>
+              </form>
+              <div id="dividends-registered-list" class="dividends-registered-list"></div>
+            </section>
           </div>
         </section>
       </div>
@@ -298,11 +486,12 @@
     </footer>
 
     <nav class="nav-bottom" id="nav-bottom" aria-label="画面切替">
-      <button class="nav-btn active" data-screen="chart"><svg><use href="#icon-chart"/></svg><span>チャート</span></button>
+      <button class="nav-btn active" data-screen="portfolio"><svg><use href="#icon-portfolio"/></svg><span>ポートフォリオ</span></button>
+      <button class="nav-btn" data-screen="chart"><svg><use href="#icon-chart"/></svg><span>チャート</span></button>
       <button class="nav-btn" data-screen="analysis"><svg><use href="#icon-flask"/></svg><span>シミュレーション</span></button>
       <button class="nav-btn" data-screen="stats"><svg><use href="#icon-stats"/></svg><span>統計</span></button>
-      <button class="nav-btn" data-screen="watchlist"><svg><use href="#icon-watchlist"/></svg><span>ウォッチリスト</span></button>
-      <button class="nav-btn" data-screen="settings"><svg><use href="#icon-settings"/></svg><span>設定</span></button>
+      <button class="nav-btn" data-screen="screener"><svg><use href="#icon-screener"/></svg><span>銘柄選定</span></button>
+      <button class="nav-btn" data-screen="dividends"><svg><use href="#icon-dividend"/></svg><span>配当</span></button>
     </nav>
   </div>
 

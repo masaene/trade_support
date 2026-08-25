@@ -6,5 +6,8 @@
   "scripts": {
     "start": "node server.js"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
 }
