@@ -21,10 +21,17 @@
   const emptyStateEl = el('empty-state');
   const loadingEl = el('loading');
   const statusText = el('status-text');
+  const barsRefreshBtnEl = el('bars-refresh-btn');
 
   let symbols = [];
   let currentBars = [];
   let currentCode = null;
+  let barsRefreshing = false; // guards against a second click while a refresh's own selectSymbol() redraw briefly re-enables the button via updateSymbolHeader
+  // Chart <-> analysis symbol sync: blocks the mirrored .select() call from
+  // bouncing back to its origin. currentCode/analysisCode can't be used for
+  // that check instead, since both only get assigned after their loader's
+  // await fetch resolves — still stale at the moment the mirrored call fires.
+  let symbolSyncInProgress = false;
 
   // ---- chart setup ----
   const chartOptions = {
@@ -177,6 +184,11 @@
     } else {
       changeEl.textContent = '';
     }
+    // Leave the button disabled if a refresh-triggered redraw is what got us
+    // here — the refresh click handler owns re-enabling it once it's fully
+    // done (still awaiting loadPositions etc. at this point), otherwise the
+    // button would briefly look clickable again mid-refresh.
+    if (!barsRefreshing) barsRefreshBtnEl.disabled = false;
   }
 
   // ---- main render ----
@@ -220,6 +232,39 @@
       loadingEl.classList.add('hidden');
     }
   }
+
+  // Fetches just the gap between the last saved bar and today (server-side,
+  // via jquants_api.py), then reuses selectSymbol to redraw everything —
+  // no separate rendering path needed for the refreshed data.
+  barsRefreshBtnEl.addEventListener('click', async () => {
+    if (!currentCode || barsRefreshing) return;
+    barsRefreshing = true;
+    const code = currentCode;
+    const originalLabel = barsRefreshBtnEl.textContent;
+    barsRefreshBtnEl.disabled = true;
+    barsRefreshBtnEl.textContent = '更新中…';
+    try {
+      const res = await fetch(`/api/bars/${code}/refresh`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (data.upToDate) {
+        statusText.textContent = `${code} は既に最新の状態です(最終日: ${data.lastDate})`;
+      } else if (data.added > 0) {
+        // selectSymbol() ends by setting its own generic status line, so the
+        // "N件更新しました" message must be applied after it, not before.
+        await selectSymbol(code);
+        statusText.textContent = `${code} の日足を${data.added}件更新しました`;
+      } else {
+        statusText.textContent = `${code} は追加のデータがありませんでした(休場日の可能性)`;
+      }
+    } catch (err) {
+      statusText.textContent = `データ更新に失敗しました: ${err.message}`;
+    } finally {
+      barsRefreshing = false;
+      barsRefreshBtnEl.disabled = false;
+      barsRefreshBtnEl.textContent = originalLabel;
+    }
+  });
 
   // ---- search / suggestions ----
   // No cap on match count — the suggestions box already scrolls
@@ -350,11 +395,23 @@
     return { select };
   }
 
+  // Mirrors a chart-screen selection onto the analysis screen (analysisCode
+  // is defined further down in this file, but that's fine — this closure
+  // only reads it once a user interaction actually calls this function,
+  // long after the whole script has finished initializing).
+  function onChartSymbolChange(code) {
+    selectSymbol(code);
+    if (symbolSyncInProgress || !code || analysisCode === code) return;
+    symbolSyncInProgress = true;
+    analysisSymbolSearch.select(code);
+    symbolSyncInProgress = false;
+  }
+
   const chartSymbolSearch = createSymbolSearchBox({
     containerEl: symbolInput.closest('.search-box'),
     inputEl: symbolInput,
     suggestionsEl: suggestionsBox,
-    onSelect: selectSymbol,
+    onSelect: onChartSymbolChange,
   });
   function chooseSymbol(code) { chartSymbolSearch.select(code); }
 
@@ -372,22 +429,11 @@
       resizeCharts();
     }
     if (screenId === 'analysis') {
-      if (!analysisInitialized) {
-        // first visit only: default to whatever symbol is already selected on
-        // the chart screen, as a convenience — never overrides a later choice
-        // made on the analysis screen itself. This already fetches fresh data,
-        // so no separate refresh is needed on this branch. Only applies when
-        // that symbol actually has an open position, since this screen's
-        // picker is otherwise restricted to held symbols.
-        analysisInitialized = true;
-        if (currentCode && heldSymbols().some((s) => s.code === currentCode)) {
-          analysisSymbolSearch.select(currentCode);
-        }
-      } else {
-        // every subsequent visit: pick up any add/settle/delete made on the
-        // chart screen (or elsewhere) since this screen was last shown.
-        refreshAnalysisLots();
-      }
+      // The symbol itself is already kept in sync continuously (see
+      // onChartSymbolChange/onAnalysisSymbolChange) — this just picks up any
+      // add/settle/delete made on the chart screen (or elsewhere) since this
+      // screen was last shown. No-ops if nothing's selected yet.
+      refreshAnalysisLots();
     }
     if (screenId === 'stats') {
       // the stats chart pane was sized 0x0 while its screen was display:none;
@@ -442,6 +488,9 @@
   const lotConfirmEl = el('lot-confirm');
   const lotConfirmContextEl = el('lot-confirm-context');
   const lotConfirmPriceEl = el('lot-confirm-price');
+  const lotConfirmSliderEl = el('lot-confirm-slider');
+  const lotConfirmMinusBtn = el('lot-confirm-minus');
+  const lotConfirmPlusBtn = el('lot-confirm-plus');
   const lotConfirmQtyRow = el('lot-confirm-qty-row');
   const lotConfirmQtyInput = el('lot-confirm-qty');
   const lotConfirmDateLabel = el('lot-confirm-date-label');
@@ -452,9 +501,12 @@
   const waterfallTotalEl = el('waterfall-total');
   const waterfallEmptyEl = el('waterfall-empty');
 
+  const TUNE_STEP = 1; // yen per ± button press, for fine-tuning the picked price
+
   let positions = [];
   let pickMode = null; // null | {kind:'add'} | {kind:'settle', lotId}
   let pendingPick = null; // {kind, lotId, price} once a price has been captured, awaiting form submit
+  let tuneHoldTimer = null; // setInterval id while a ± button is held down
   let lotOverlaySeries = []; // per-lot buy→current(or→sell) line series drawn on the price chart
 
   function todayStr() {
@@ -780,9 +832,65 @@
     updatePickModeUI();
   }
 
-  function openLotConfirm(mode, price, lotId, time) {
-    pendingPick = { kind: mode, lotId, price };
+  // Updates price state everywhere it's displayed (output, slider, pendingPick)
+  // and the ± buttons' disabled state at the slider's bounds. Shared by the
+  // slider drag and the ± nudge so there's one place that keeps them in sync.
+  function setPendingPrice(newPrice) {
+    if (!pendingPick) return;
+    const min = Number(lotConfirmSliderEl.min);
+    const max = Number(lotConfirmSliderEl.max);
+    const price = Math.min(max, Math.max(min, newPrice));
+    pendingPick.price = price;
     lotConfirmPriceEl.textContent = `${fmt(price)}円`;
+    lotConfirmSliderEl.value = price;
+    lotConfirmMinusBtn.disabled = price <= min;
+    lotConfirmPlusBtn.disabled = price >= max;
+  }
+
+  function stopTuneHold() {
+    clearInterval(tuneHoldTimer);
+    tuneHoldTimer = null;
+  }
+
+  // Press-and-hold on ± repeats and accelerates, same shape as a volume
+  // rocker — one tap for a 1円 nudge, a hold for sweeping across the range.
+  function startTuneHold(direction) {
+    stopTuneHold();
+    let steps = 0;
+    const step = () => {
+      steps += 1;
+      const accel = steps > 10 ? 5 : steps > 5 ? 2 : 1;
+      setPendingPrice(pendingPick.price + direction * TUNE_STEP * accel);
+    };
+    step();
+    tuneHoldTimer = setInterval(step, 90);
+  }
+
+  // Applies the slider's high/low bounds for whichever bar is now relevant
+  // (the originally-clicked bar, or one looked up for a manually-edited
+  // date), then re-clamps the current price into that range. Shared by
+  // openLotConfirm and the date input's change handler so the slider always
+  // reflects whatever date is actually showing, not just the day that was
+  // first clicked on the chart.
+  function applyTuneRangeForBar(bar) {
+    if (bar) {
+      lotConfirmSliderEl.min = bar.low;
+      lotConfirmSliderEl.max = bar.high;
+      lotConfirmSliderEl.disabled = false;
+    } else {
+      // No bar for this date (outside the loaded history, or a market
+      // holiday) — freeze the slider at the current price rather than
+      // guessing a range, but keep it visible so the layout doesn't jump.
+      lotConfirmSliderEl.min = pendingPick.price;
+      lotConfirmSliderEl.max = pendingPick.price;
+      lotConfirmSliderEl.disabled = true;
+    }
+    setPendingPrice(pendingPick.price);
+  }
+
+  function openLotConfirm(mode, price, lotId, time, bar) {
+    pendingPick = { kind: mode, lotId, price };
+    applyTuneRangeForBar(bar);
     // Use the date of the bar that was clicked, not today's date — the whole
     // point of picking a price on the chart is to backdate past trades.
     lotConfirmDateInput.value = time || todayStr();
@@ -804,6 +912,7 @@
   }
 
   function closeLotConfirm() {
+    stopTuneHold();
     pendingPick = null;
     lotConfirmEl.classList.add('hidden');
   }
@@ -825,10 +934,11 @@
     if (!pickMode || !param.point) return;
     const rawPrice = candleSeries.coordinateToPrice(param.point.y);
     if (rawPrice === null) return;
-    const price = clampToBody(rawPrice, param.time ? barAtTime(param.time) : null);
+    const bar = param.time ? barAtTime(param.time) : null;
+    const price = clampToBody(rawPrice, bar);
     const { kind, lotId } = pickMode;
     disarmPicking();
-    openLotConfirm(kind, price, lotId, param.time);
+    openLotConfirm(kind, price, lotId, param.time, bar);
   });
 
   document.addEventListener('keydown', (e) => {
@@ -884,6 +994,24 @@
     else armSettlePicking(pendingPick.lotId);
   });
   el('lot-confirm-cancel').addEventListener('click', closeLotConfirm);
+
+  lotConfirmSliderEl.addEventListener('input', () => {
+    if (!pendingPick) return;
+    setPendingPrice(Number(lotConfirmSliderEl.value));
+  });
+  [[lotConfirmMinusBtn, -1], [lotConfirmPlusBtn, 1]].forEach(([btn, direction]) => {
+    btn.addEventListener('mousedown', () => { if (pendingPick) startTuneHold(direction); });
+    btn.addEventListener('touchstart', (e) => { if (pendingPick) { e.preventDefault(); startTuneHold(direction); } });
+    ['mouseup', 'mouseleave', 'touchend'].forEach((ev) => btn.addEventListener(ev, stopTuneHold));
+  });
+  // Editing the date manually (not just picking it via the chart click) should
+  // re-target the slider at that new day's range, not leave it pinned to
+  // whichever day was originally clicked.
+  lotConfirmDateInput.addEventListener('change', () => {
+    if (!pendingPick) return;
+    const bar = lotConfirmDateInput.value ? barAtTime(lotConfirmDateInput.value) : null;
+    applyTuneRangeForBar(bar);
+  });
 
   lotConfirmEl.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1015,7 +1143,6 @@
   let analysisBars = [];
   let analysisLots = [];
   let analysisRange = null; // { min, max, defaultPrice }
-  let analysisInitialized = false; // guards the one-time default-symbol behavior
   let analysisSimSettledIds = new Set(); // lot ids checked as "settle now" in the partial-settlement simulator
 
   // The slider's bounds are exactly the chart's historical low/high, so a
@@ -1400,6 +1527,10 @@
   function onAnalysisSymbolChange(code) {
     if (!code) { showAnalysisEmpty(); return; }
     loadAnalysisSymbol(code);
+    if (symbolSyncInProgress || currentCode === code) return;
+    symbolSyncInProgress = true;
+    chartSymbolSearch.select(code);
+    symbolSyncInProgress = false;
   }
 
   const analysisSymbolSearch = createSymbolSearchBox({
@@ -1873,6 +2004,7 @@
   const screenerOrderScoreInputEl = el('screener-order-score');
   const screenerSlopePeriodPickerEl = el('screener-slope-period-picker');
   const screenerMinSlopeInputEl = el('screener-min-slope');
+  const screenerSlopeWindowInputEl = el('screener-slope-window');
   const screenerSurgeDaysInputEl = el('screener-surge-days');
   const screenerSurgePctInputEl = el('screener-surge-pct');
   const screenerVolRatioMaxInputEl = el('screener-vol-ratio-max');
@@ -1959,7 +2091,8 @@
     screenerLoadErrorEl.classList.add('hidden');
     screenerContentEl.classList.remove('hidden');
     try {
-      const res = await fetch('/api/screener');
+      const slopeWindow = Number(screenerSlopeWindowInputEl.value) || 10;
+      const res = await fetch(`/api/screener?slopeWindow=${slopeWindow}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       screenerRows = data.symbols || [];
@@ -2006,6 +2139,13 @@
     if (screenerRows) renderScreener();
     saveScreenerSettings();
   });
+  // Unlike the other filters (which just re-filter/re-sort rows already
+  // fetched), the regression window changes how slopePct itself is computed
+  // server-side, so this has to trigger a real refetch, not just a re-render.
+  screenerSlopeWindowInputEl.addEventListener('change', () => {
+    if (screenerRows) loadScreenerData();
+    saveScreenerSettings();
+  });
   screenerRefreshBtnEl.addEventListener('click', () => loadScreenerData());
   screenerListEl.addEventListener('click', (e) => {
     const row = e.target.closest('.screener-row');
@@ -2024,6 +2164,7 @@
           slopePeriod: screenerSlopePeriod,
           orderScoreMin: Number(screenerOrderScoreInputEl.value),
           minSlope: Number(screenerMinSlopeInputEl.value),
+          slopeWindow: Number(screenerSlopeWindowInputEl.value),
           surgeDays: Number(screenerSurgeDaysInputEl.value),
           surgePct: Number(screenerSurgePctInputEl.value),
           volRatioMax: Number(screenerVolRatioMaxInputEl.value),
@@ -2043,6 +2184,9 @@
     if (SMA_PERIODS.includes(saved.slopePeriod)) setScreenerSlopePeriod(saved.slopePeriod);
     if (Number.isFinite(saved.orderScoreMin)) screenerOrderScoreInputEl.value = saved.orderScoreMin;
     if (Number.isFinite(saved.minSlope)) screenerMinSlopeInputEl.value = saved.minSlope;
+    if (Number.isInteger(saved.slopeWindow) && saved.slopeWindow >= 2 && saved.slopeWindow <= 60) {
+      screenerSlopeWindowInputEl.value = saved.slopeWindow;
+    }
     if ([5, 20].includes(saved.surgeDays)) screenerSurgeDaysInputEl.value = saved.surgeDays;
     if (Number.isFinite(saved.surgePct)) screenerSurgePctInputEl.value = saved.surgePct;
     if (Number.isFinite(saved.volRatioMax)) screenerVolRatioMaxInputEl.value = saved.volRatioMax;

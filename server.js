@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -119,6 +120,21 @@ function listSymbols() {
   }
   symbols.sort((a, b) => a.code.localeCompare(b.code));
   return symbols;
+}
+
+function todayStr() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+function addDays(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 function loadBars(code) {
@@ -272,7 +288,7 @@ function pctChange(bars, daysAgo) {
   return from === 0 ? null : ((to / from) - 1) * 100;
 }
 
-function computeScreenerMetrics() {
+function computeScreenerMetrics(slopeWindow = SLOPE_REGRESSION_WINDOW) {
   const master = loadMaster();
   const files = fs.readdirSync(BARS_DIR);
   const rows = [];
@@ -288,7 +304,7 @@ function computeScreenerMetrics() {
     for (const period of SCREENER_SMA_PERIODS) {
       const series = computeSMASeries(bars, period);
       const value = series[series.length - 1];
-      const tail = series.slice(-SLOPE_REGRESSION_WINDOW);
+      const tail = series.slice(-slopeWindow);
       const slope = linearRegressionSlope(tail);
       sma[period] = { value, slopePct: value ? (slope / value) * 100 : 0 };
     }
@@ -493,6 +509,50 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Must come before the generic barsMatch below — that regex is greedy
+  // enough to swallow "<code>/refresh" as its capture group otherwise.
+  const barsRefreshMatch = pathname.match(/^\/api\/bars\/([^/]+)\/refresh$/);
+  if (barsRefreshMatch) {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    const code = barsRefreshMatch[1];
+    if (!CODE_RE.test(code)) {
+      sendJson(res, 400, { error: 'invalid code' });
+      return;
+    }
+    const existingBars = loadBars(code);
+    const today = todayStr();
+    const lastDate = existingBars && existingBars.length ? existingBars[existingBars.length - 1].time : null;
+    const fromDate = lastDate ? addDays(lastDate, 1) : null;
+
+    if (lastDate && fromDate > today) {
+      sendJson(res, 200, { upToDate: true, lastDate });
+      return;
+    }
+
+    const pythonBin = path.join(ROOT_DIR, '.venv', 'bin', 'python3');
+    const args = ['jquants_api.py', code, '--bars-only'];
+    if (fromDate) args.push('--from', fromDate, '--to', today);
+
+    execFile(pythonBin, args, { cwd: ROOT_DIR, timeout: 120000 }, (err, stdout, stderr) => {
+      if (err) {
+        sendJson(res, 500, { error: `データ取得に失敗しました: ${stderr || err.message}` });
+        return;
+      }
+      try {
+        const updatedBars = loadBars(code);
+        const added = updatedBars ? updatedBars.length - (existingBars ? existingBars.length : 0) : 0;
+        sendJson(res, 200, {
+          ok: true,
+          added: Math.max(0, added),
+          lastDate: updatedBars && updatedBars.length ? updatedBars[updatedBars.length - 1].time : null,
+        });
+      } catch (readErr) {
+        sendJson(res, 500, { error: readErr.message });
+      }
+    });
+    return;
+  }
+
   const barsMatch = pathname.match(/^\/api\/bars\/(.+)$/);
   if (barsMatch) {
     if (req.method !== 'GET') return methodNotAllowed(res);
@@ -548,7 +608,11 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/screener') {
     if (req.method !== 'GET') return methodNotAllowed(res);
     try {
-      sendJson(res, 200, { symbols: computeScreenerMetrics() });
+      const rawWindow = Number(url.searchParams.get('slopeWindow'));
+      const slopeWindow = Number.isInteger(rawWindow) && rawWindow >= 2 && rawWindow <= 60
+        ? rawWindow
+        : SLOPE_REGRESSION_WINDOW;
+      sendJson(res, 200, { symbols: computeScreenerMetrics(slopeWindow), slopeWindow });
     } catch (err) {
       sendJson(res, 500, { error: err.message });
     }
@@ -751,9 +815,14 @@ const server = http.createServer((req, res) => {
     return methodNotAllowed(res);
   }
 
-  // Static files, defaulting to index.html.
+  // Static files, defaulting to index.html — also resolves an extensionless
+  // path (e.g. /market) to that folder's index.html, so a standalone page
+  // under public/ can be added just by creating the folder, no new route.
   if (req.method !== 'GET') return methodNotAllowed(res);
-  let relPath = pathname === '/' ? '/index.html' : pathname;
+  let relPath = pathname;
+  if (relPath === '/' || !path.extname(relPath)) {
+    relPath = relPath.replace(/\/$/, '') + '/index.html';
+  }
   relPath = path.normalize(relPath).replace(/^(\.\.[/\\])+/, '');
   const filePath = path.join(PUBLIC_DIR, relPath);
   if (!filePath.startsWith(PUBLIC_DIR)) {

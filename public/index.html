@@ -54,6 +54,7 @@
         <button class="nav-btn" data-screen="stats"><svg><use href="#icon-stats"/></svg><span>統計</span></button>
         <button class="nav-btn" data-screen="screener"><svg><use href="#icon-screener"/></svg><span>銘柄選定</span></button>
         <button class="nav-btn" data-screen="dividends"><svg><use href="#icon-dividend"/></svg><span>配当</span></button>
+        <a class="nav-external" href="/market" title="市場分析(別ページで開きます)">市場分析 ↗</a>
       </nav>
 
       <div class="screen-area">
@@ -104,6 +105,7 @@
               <span id="info-close" class="price">&mdash;</span>
               <span id="info-change" class="change"></span>
             </div>
+            <button class="btn" id="bars-refresh-btn" disabled>データ更新</button>
           </section>
 
           <main class="chart-area">
@@ -150,6 +152,11 @@
                   <label>価格<output id="lot-confirm-price"></output>
                     <button type="button" id="lot-confirm-repick">再選択</button>
                   </label>
+                </div>
+                <div class="lot-confirm__row lot-confirm__tune">
+                  <button type="button" class="tune-btn" id="lot-confirm-minus" aria-label="価格を1円下げる">−</button>
+                  <input type="range" id="lot-confirm-slider" class="tune-slider" step="1">
+                  <button type="button" class="tune-btn" id="lot-confirm-plus" aria-label="価格を1円上げる">＋</button>
                 </div>
                 <div class="lot-confirm__row" id="lot-confirm-qty-row">
                   <label>数量(株)<input type="number" id="lot-confirm-qty" min="1" step="1" value="100" required></label>
@@ -346,6 +353,9 @@
                 <label>最小傾き（%/日）
                   <input type="number" id="screener-min-slope" min="0" step="0.01" value="0.05">
                 </label>
+                <label>回帰期間（日）
+                  <input type="number" id="screener-slope-window" min="2" max="60" step="1" value="10">
+                </label>
               </div>
             </section>
 
@@ -492,6 +502,7 @@
       <button class="nav-btn" data-screen="stats"><svg><use href="#icon-stats"/></svg><span>統計</span></button>
       <button class="nav-btn" data-screen="screener"><svg><use href="#icon-screener"/></svg><span>銘柄選定</span></button>
       <button class="nav-btn" data-screen="dividends"><svg><use href="#icon-dividend"/></svg><span>配当</span></button>
+      <a class="nav-external" href="/market" title="市場分析(別ページで開きます)">市場分析 ↗</a>
     </nav>
   </div>
 

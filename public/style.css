@@ -171,6 +171,21 @@ html, body {
 .nav-btn:hover { color: var(--text); background: var(--bg-3); }
 .nav-btn.active { color: #cfe0ff; background: #1f3a70; }
 
+/* Leaves the SPA entirely (a real page navigation, not selectScreen), so it's
+   deliberately not styled like a nav-btn tab — a thin divider + plain text
+   link signals "this goes elsewhere" rather than "another screen here". */
+.nav-external {
+  margin-top: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.nav-external:hover { color: var(--accent); }
+
 .screen-area {
   flex: 1;
   min-width: 0;
@@ -541,6 +556,62 @@ html, body {
 }
 .lot-confirm__actions { display: flex; gap: 0.5rem; margin-left: auto; }
 .lot-confirm__actions .btn { border-radius: 6px; }
+
+.lot-confirm__tune { flex: 1 1 100%; display: flex; align-items: center; gap: 0.5rem; }
+
+.tune-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+.tune-btn:hover:not(:disabled) { background: var(--bg-4, var(--bg-3)); border-color: var(--accent); color: var(--accent); }
+.tune-btn:active:not(:disabled) { background: rgba(41, 98, 255, 0.16); }
+.tune-btn:disabled { opacity: 0.35; cursor: default; }
+
+.tune-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--down) 0%, var(--border) 0%, var(--border) 100%, var(--up) 100%);
+  outline: none;
+}
+.tune-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-1);
+  box-shadow: 0 0 0 1px var(--accent);
+  cursor: grab;
+  margin-top: -6px;
+}
+.tune-slider::-webkit-slider-thumb:active { cursor: grabbing; }
+.tune-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-1);
+  box-shadow: 0 0 0 1px var(--accent);
+  cursor: grab;
+}
+.tune-slider::-moz-range-track { height: 4px; border-radius: 999px; background: var(--border); }
+.tune-slider:disabled { opacity: 0.35; }
 
 .positions-list {
   flex: 1;
@@ -1450,6 +1521,15 @@ html, body {
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
   .nav-bottom .nav-btn { flex: 1; border-radius: 0; padding: 0.4rem 0.2rem; }
+  .nav-bottom .nav-external {
+    flex: 0 0 auto;
+    align-self: center;
+    margin: 0 0.5rem;
+    padding: 0.3rem 0;
+    border-top: none;
+    border-left: 1px solid var(--border);
+    padding-left: 0.5rem;
+  }
 
   /* Positions panel starts collapsed on mobile (header + aggregate only) to
      leave room for the chart; the collapse toggle button becomes visible. */
