@@ -185,6 +185,18 @@ html, body {
   text-decoration: none;
 }
 .nav-external:hover { color: var(--accent); }
+/* The external links (市場分析 / 配当管理) sit in one group so they share a
+   single divider and, on mobile, stack in one narrow column instead of each
+   squeezing the tab buttons. */
+.nav-external-group {
+  margin-top: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.nav-external-group .nav-external { margin: 0; padding: 0; border: none; }
 
 .screen-area {
   flex: 1;
@@ -1529,6 +1541,22 @@ html, body {
     border-top: none;
     border-left: 1px solid var(--border);
     padding-left: 0.5rem;
+  }
+  .nav-bottom .nav-external-group {
+    flex: 0 0 auto;
+    align-self: center;
+    margin: 0 0.5rem;
+    padding: 0.2rem 0 0.2rem 0.5rem;
+    border-top: none;
+    border-left: 1px solid var(--border);
+    gap: 0.45rem;
+  }
+  .nav-bottom .nav-external-group .nav-external {
+    flex: none;
+    align-self: auto;
+    margin: 0;
+    padding: 0;
+    border: none;
   }
 
   /* Positions panel starts collapsed on mobile (header + aggregate only) to

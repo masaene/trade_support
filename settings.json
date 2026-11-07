@@ -1,0 +1,17 @@
+{
+  "stats": {
+    "smaPeriod": 25,
+    "varConfidence": 0.95,
+    "varWindow": 200
+  },
+  "screener": {
+    "trendMode": "slope",
+    "slopePeriod": 25,
+    "orderScoreMin": 3,
+    "minSlope": 0.05,
+    "slopeWindow": 5,
+    "surgeDays": 5,
+    "surgePct": 15,
+    "volRatioMax": 1.5
+  }
+}

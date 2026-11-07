@@ -1,15 +1,33 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { execFile } = require('child_process');
+const {
+  mergeBarsForCode,
+  mergeFinanceForCode,
+  buildS33ToIndustryNo,
+  computeFairValue,
+  computeBookValueInfo,
+  computeEpsGrowthInfo,
+  computeAnnualEpsSeries,
+  computeEpsCagrSeries,
+  toNum,
+} = require('./lib/mergeData');
+const { parseDividendHist, buildForecast, simulateReinvestment, MIN_POINTS } = require('./lib/dividendForecast');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
 const BARS_DIR = path.join(ROOT_DIR, 'bars');
+const JQUANTS_CACHE_DIR = path.join(ROOT_DIR, 'jquants_cache');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const POSITIONS_DIR = path.join(ROOT_DIR, 'positions');
 const DIVIDEND_POSITIONS_DIR = path.join(ROOT_DIR, 'dividend_positions');
-const CODE_RE = /^\d{4}$/;
+const DIVIDEND_HIST_DIR = path.join(ROOT_DIR, 'dividend_hist');
+// 4-digit numeric codes ('6140') or the newer 3-digit+letter shape TSE
+// introduced for some listings ('167A' — see master.json's raw 5-char
+// codes, which truncate to this 4-char form; e.g. '130A0' -> '130A').
+const CODE_RE = /^(?:\d{4}|\d{3}[A-Za-z])$/;
 const MAX_BODY_BYTES = 64 * 1024;
 
 fs.mkdirSync(POSITIONS_DIR, { recursive: true });
@@ -137,21 +155,123 @@ function addDays(dateStr, days) {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+// Reads the merged CSV+JSON cache (see lib/mergeData.js, scripts/build_cache.js)
+// when it exists, falling back to bars/{code}.json for a code that hasn't
+// been through a cache build yet (e.g. right after "データ更新" on a
+// brand-new symbol) so nothing breaks before the next batch build.
+function barsSourcePath(code) {
+  const cachePath = path.join(JQUANTS_CACHE_DIR, `${code}.json`);
+  if (fs.existsSync(cachePath)) return cachePath;
+  return path.join(BARS_DIR, `${code}.json`);
+}
+
+// After jquants_api.py refreshes bars/{code}.json with a live API fetch, that
+// fetch is authoritative for this code going forward (it's the same
+// underlying J-Quants source the CSV dump came from, just fresher) — so the
+// cache entry is rebuilt straight from it rather than re-scanning every CSV
+// file just for one code.
+function syncCacheFromFreshBars(code) {
+  const freshPath = path.join(BARS_DIR, `${code}.json`);
+  if (!fs.existsSync(freshPath)) return;
+  const raw = JSON.parse(fs.readFileSync(freshPath, 'utf8'));
+  const merged = mergeBarsForCode(raw.data || [], []);
+  fs.mkdirSync(JQUANTS_CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(JQUANTS_CACHE_DIR, `${code}.json`), JSON.stringify(merged));
+}
+
+function financeSourceExists(code) {
+  return fs.existsSync(path.join(JQUANTS_CACHE_DIR, `${code}_finance.json`))
+    || fs.existsSync(path.join(BARS_DIR, `${code}_finance_summary.json`));
+}
+
+// Mirrors syncCacheFromFreshBars for the finance side.
+function syncCacheFromFreshFinance(code) {
+  const freshPath = path.join(BARS_DIR, `${code}_finance_summary.json`);
+  if (!fs.existsSync(freshPath)) return;
+  const raw = JSON.parse(fs.readFileSync(freshPath, 'utf8'));
+  const merged = mergeFinanceForCode(raw.data || [], []);
+  fs.mkdirSync(JQUANTS_CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(JQUANTS_CACHE_DIR, `${code}_finance.json`), JSON.stringify(merged));
+}
+
+// Raw rows (Date/O/H/L/C/... + Adj*), unsorted — for fair-value math, which
+// only needs the latest raw Close, not the {time,open,...} chart shape.
+function loadRawBars(code) {
+  const barsPath = barsSourcePath(code);
+  if (!fs.existsSync(barsPath)) return null;
+  const raw = JSON.parse(fs.readFileSync(barsPath, 'utf8'));
+  if (!Array.isArray(raw.data)) return null;
+  return raw.data
+    .filter((row) => row.C !== null && row.C !== undefined) // see loadBars — a handful of no-trade days come back all-null
+    .slice()
+    .sort((a, b) => (a.Date < b.Date ? -1 : a.Date > b.Date ? 1 : 0));
+}
+
+let perSectorCache = null;
+function loadPerSector() {
+  if (!perSectorCache) {
+    perSectorCache = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, 'market', 'data', 'per-by-sector.json'), 'utf8'));
+  }
+  return perSectorCache;
+}
+
+// code must already be validated with CODE_RE by the caller. Lynch fair
+// value, PBR=1 book value, and the EPS-growth-rate line are all computed
+// independently — a code missing a sector-PER match can still show the
+// book-value/growth lines, and vice versa.
+function fairValueForCode(code) {
+  const info = loadMaster().get(code);
+  const bars = loadRawBars(code);
+  if (!bars || !bars.length) return null;
+  const finance = loadFinanceSummary(code) || [];
+  const lastBar = bars[bars.length - 1];
+  const currentPrice = toNum(lastBar.C);
+
+  let fv = null;
+  if (info) {
+    const s33ToNo = buildS33ToIndustryNo(Array.from(loadMaster().values()));
+    const sectorByNo = new Map(loadPerSector().sectors.map((s) => [s.no, s]));
+    fv = computeFairValue({ masterInfo: info, s33ToNo, sectorByNo, financeRecords: finance, bars });
+  }
+  const bookValue = computeBookValueInfo(finance, lastBar.Date, currentPrice);
+  const growth = computeEpsGrowthInfo(finance, lastBar.Date, currentPrice);
+  const annualEpsSeries = computeAnnualEpsSeries(finance, lastBar.Date);
+  const epsCagrSeries = computeEpsCagrSeries(finance, lastBar.Date, 3);
+
+  if (!fv && !bookValue && !growth && !annualEpsSeries.length) return null;
+  return {
+    ...(fv || { currentPrice }),
+    market: info ? info.MktNm : undefined,
+    bookValue,
+    annualEpsSeries,
+    epsCagrSeries,
+    growth,
+  };
+}
+
 function loadBars(code) {
-  const barsPath = path.join(BARS_DIR, `${code}.json`);
+  const barsPath = barsSourcePath(code);
   if (!fs.existsSync(barsPath)) return null;
   const raw = JSON.parse(fs.readFileSync(barsPath, 'utf8'));
   const rows = (raw.data || [])
     .slice()
     .sort((a, b) => (a.Date < b.Date ? -1 : a.Date > b.Date ? 1 : 0));
-  return rows.map((row) => ({
-    time: row.Date,
-    open: row.AdjO,
-    high: row.AdjH,
-    low: row.AdjL,
-    close: row.AdjC,
-    volume: row.AdjVo,
-  }));
+  return rows
+    .map((row) => ({
+      time: row.Date,
+      open: row.AdjO,
+      high: row.AdjH,
+      low: row.AdjL,
+      close: row.AdjC,
+      volume: row.AdjVo,
+    }))
+    // A handful of dates come back from the API/CSV with every field null
+    // (a no-trade day, not a real candle) — found via a real crash: passing
+    // a null OHLC value into lightweight-charts' CandlestickSeries throws
+    // "Value is null" deep in its renderer and aborts the whole chart's
+    // render loop, silently killing every series drawn after it (SMA,
+    // fair-value/PBR lines included), not just the one bad candle.
+    .filter((b) => b.open !== null && b.high !== null && b.low !== null && b.close !== null);
 }
 
 // --- correlation ranking: Pearson correlation of daily returns between the
@@ -434,8 +554,14 @@ function saveSettings(settings) {
 const DIV_ACTUAL_QUARTER_FIELDS = ['Div1Q', 'Div2Q', 'Div3Q', 'DivFY'];
 const DIV_FORECAST_QUARTER_FIELDS = ['FDiv1Q', 'FDiv2Q', 'FDiv3Q', 'FDivFY'];
 
+function financeSourcePath(code) {
+  const cachePath = path.join(JQUANTS_CACHE_DIR, `${code}_finance.json`);
+  if (fs.existsSync(cachePath)) return cachePath;
+  return path.join(BARS_DIR, `${code}_finance_summary.json`);
+}
+
 function loadFinanceSummary(code) {
-  const summaryPath = path.join(BARS_DIR, `${code}_finance_summary.json`);
+  const summaryPath = financeSourcePath(code);
   try {
     const parsed = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
     return Array.isArray(parsed.data) ? parsed.data : null;
@@ -485,6 +611,94 @@ function computeDividendForCode(code) {
   return null;
 }
 
+// Full-year dividend estimate for the /dividend/ pages. computeDividendForCode
+// above sums only the *actual* quarters, so a symbol that has announced just
+// its interim dividend reads as roughly half its real annual amount; this
+// one aims at the whole year. From the most-recently-disclosed report, in
+// order: the confirmed full-year total (DivAnn), the company's full-year
+// forecast (FDivAnn), then each of Div1Q/2Q/3Q/FY taken from the actual if
+// disclosed and from the matching forecast (FDiv*) otherwise. Falls back to
+// computeDividendForCode when the report carries none of those.
+function computeAnnualDividendForCode(code) {
+  const records = loadFinanceSummary(code);
+  if (!records || !records.length) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const pastOrToday = records.filter((r) => r.DiscDate && r.DiscDate <= today);
+  const record = pastOrToday.length
+    ? pastOrToday.reduce((latest, r) => (r.DiscDate > latest.DiscDate ? r : latest))
+    : records[records.length - 1];
+
+  const divAnn = toDivNumber(record.DivAnn);
+  if (divAnn !== null && divAnn > 0) {
+    return { perShare: divAnn, source: 'actual_annual', asOf: record.DiscDate };
+  }
+
+  const fDivAnn = toDivNumber(record.FDivAnn);
+  if (fDivAnn !== null && fDivAnn > 0) {
+    return { perShare: fDivAnn, source: 'forecast_annual', asOf: record.DiscDate };
+  }
+
+  const mergedSum = DIV_ACTUAL_QUARTER_FIELDS.reduce((sum, field, i) => {
+    const actual = toDivNumber(record[field]);
+    const forecast = toDivNumber(record[DIV_FORECAST_QUARTER_FIELDS[i]]);
+    const n = actual !== null ? actual : forecast;
+    return n === null ? sum : sum + n;
+  }, 0);
+  if (mergedSum > 0) {
+    return { perShare: mergedSum, source: 'actual_and_forecast_quarters', asOf: record.DiscDate };
+  }
+
+  return computeDividendForCode(code);
+}
+
+// code -> total registered dividend-purpose quantity, skipping empty files
+// (a deleted registration leaves `{"data":[]}` behind).
+function loadDividendQuantities() {
+  const quantities = new Map();
+  for (const file of fs.readdirSync(DIVIDEND_POSITIONS_DIR)) {
+    const match = file.match(/^(\d{4}|\d{3}[A-Za-z])\.json$/);
+    if (!match) continue;
+    const qty = loadDividendPositions(match[1]).reduce((s, l) => s + l.quantity, 0);
+    if (qty > 0) quantities.set(match[1], qty);
+  }
+  return quantities;
+}
+
+// A symbol's hand-maintained dividend history (dividend_hist/<code>.txt), or
+// null when it has no file.
+function loadDividendHistory(code) {
+  try {
+    return parseDividendHist(fs.readFileSync(path.join(DIVIDEND_HIST_DIR, `${code}.txt`), 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+// Latest closing price of a symbol ({ close, asOf }) or null, memoised by the
+// bars file's mtime — the forecast asks for every held symbol, and each bars
+// file is a few hundred KB to parse.
+const latestCloseCache = new Map();
+
+function latestClose(code) {
+  const barsPath = barsSourcePath(code);
+  let mtimeMs;
+  try {
+    mtimeMs = fs.statSync(barsPath).mtimeMs;
+  } catch {
+    return null;
+  }
+  const hit = latestCloseCache.get(barsPath);
+  if (hit && hit.mtimeMs === mtimeMs) return hit.value;
+  const bars = loadBars(code) || [];
+  const last = bars[bars.length - 1];
+  const close = last ? Number(last.close) : NaN;
+  const value = Number.isFinite(close) && close > 0 ? { close, asOf: last.time } : null;
+  latestCloseCache.set(barsPath, { mtimeMs, value });
+  return value;
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function validatePriceFields(body, priceKey, dateKey) {
@@ -509,8 +723,76 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Must come before the generic barsMatch below — that regex is greedy
-  // enough to swallow "<code>/refresh" as its capture group otherwise.
+  // Both of these (and barsRefreshMatch below) must come before the generic
+  // barsMatch further down — that regex is greedy enough to swallow
+  // "<code>/refresh" or "<code>/ensure-history" as its capture group
+  // otherwise, silently 405-ing them (learned the hard way once already on
+  // /refresh; same fix here).
+  //
+  // For a code that has never been through jquants_api.py directly (most of
+  // the ~4,700-code universe only has the CSV dump's recent months), fetches
+  // full history once before the market-analysis chart displays it — see
+  // plan section F. A no-op if bars/{code}.json already exists.
+  const ensureHistoryMatch = pathname.match(/^\/api\/bars\/([^/]+)\/ensure-history$/);
+  if (ensureHistoryMatch) {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    const code = ensureHistoryMatch[1];
+    if (!CODE_RE.test(code)) {
+      sendJson(res, 400, { error: 'invalid code' });
+      return;
+    }
+    if (fs.existsSync(path.join(BARS_DIR, `${code}.json`))) {
+      sendJson(res, 200, { ok: true, fetched: false });
+      return;
+    }
+    const pythonBin = path.join(ROOT_DIR, '.venv', 'bin', 'python3');
+    execFile(pythonBin, ['jquants_api.py', code, '--bars-only'], { cwd: ROOT_DIR, timeout: 120000 }, (err, stdout, stderr) => {
+      if (err) {
+        // jquants_api.py exits non-zero when the API kept erroring through
+        // every retry (e.g. rate limiting) and had to skip the save — its
+        // diagnostic goes to stdout, not stderr, since it's a print(), not
+        // an exception.
+        sendJson(res, 500, { error: `株価データの取得に失敗しました(レート制限の可能性があります): ${stdout || stderr || err.message}` });
+        return;
+      }
+      try {
+        syncCacheFromFreshBars(code);
+        sendJson(res, 200, { ok: true, fetched: true });
+      } catch (readErr) {
+        sendJson(res, 500, { error: readErr.message });
+      }
+    });
+    return;
+  }
+
+  const ensureFinanceMatch = pathname.match(/^\/api\/finance\/([^/]+)\/ensure$/);
+  if (ensureFinanceMatch) {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    const code = ensureFinanceMatch[1];
+    if (!CODE_RE.test(code)) {
+      sendJson(res, 400, { error: 'invalid code' });
+      return;
+    }
+    if (financeSourceExists(code)) {
+      sendJson(res, 200, { ok: true, fetched: false });
+      return;
+    }
+    const pythonBin = path.join(ROOT_DIR, '.venv', 'bin', 'python3');
+    execFile(pythonBin, ['jquants_api.py', code, '--finance-only'], { cwd: ROOT_DIR, timeout: 120000 }, (err, stdout, stderr) => {
+      if (err) {
+        sendJson(res, 500, { error: `財務データの取得に失敗しました(レート制限の可能性があります): ${stdout || stderr || err.message}` });
+        return;
+      }
+      try {
+        syncCacheFromFreshFinance(code);
+        sendJson(res, 200, { ok: true, fetched: true });
+      } catch (readErr) {
+        sendJson(res, 500, { error: readErr.message });
+      }
+    });
+    return;
+  }
+
   const barsRefreshMatch = pathname.match(/^\/api\/bars\/([^/]+)\/refresh$/);
   if (barsRefreshMatch) {
     if (req.method !== 'POST') return methodNotAllowed(res);
@@ -535,10 +817,11 @@ const server = http.createServer((req, res) => {
 
     execFile(pythonBin, args, { cwd: ROOT_DIR, timeout: 120000 }, (err, stdout, stderr) => {
       if (err) {
-        sendJson(res, 500, { error: `データ取得に失敗しました: ${stderr || err.message}` });
+        sendJson(res, 500, { error: `データ取得に失敗しました(レート制限の可能性があります): ${stdout || stderr || err.message}` });
         return;
       }
       try {
+        syncCacheFromFreshBars(code);
         const updatedBars = loadBars(code);
         const added = updatedBars ? updatedBars.length - (existingBars ? existingBars.length : 0) : 0;
         sendJson(res, 200, {
@@ -577,6 +860,67 @@ const server = http.createServer((req, res) => {
         sector: info ? info.S33Nm : '',
         bars,
       });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  if (pathname === '/api/lynch-ranking') {
+    if (req.method !== 'GET') return methodNotAllowed(res);
+    try {
+      const rankingPath = path.join(JQUANTS_CACHE_DIR, '_lynch_ranking.json');
+      if (!fs.existsSync(rankingPath)) {
+        sendJson(res, 404, { error: 'ランキングが未生成です。scripts/build_cache.js を実行してください。' });
+        return;
+      }
+      // ~1MB of JSON (~3800 rows) — every /market/ page load fetches this in
+      // full, so gzip it when the client supports it rather than shipping it
+      // raw (gzip gets this down to roughly a quarter of the minified size),
+      // and answer a conditional GET with 304 so revisiting the page without
+      // an intervening market-cache-build re-run costs nothing.
+      const stat = fs.statSync(rankingPath);
+      const lastModified = stat.mtime.toUTCString();
+      if (req.headers['if-modified-since'] === lastModified) {
+        res.writeHead(304);
+        res.end();
+        return;
+      }
+      const acceptsGzip = (req.headers['accept-encoding'] || '').includes('gzip');
+      const headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Last-Modified': lastModified,
+        'Cache-Control': 'no-cache',
+      };
+      if (acceptsGzip) headers['Content-Encoding'] = 'gzip';
+      res.writeHead(200, headers);
+      const source = fs.createReadStream(rankingPath);
+      if (acceptsGzip) {
+        source.pipe(zlib.createGzip()).pipe(res);
+      } else {
+        source.pipe(res);
+      }
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  const fairValueMatch = pathname.match(/^\/api\/fair-value\/([^/]+)$/);
+  if (fairValueMatch) {
+    if (req.method !== 'GET') return methodNotAllowed(res);
+    const code = fairValueMatch[1];
+    if (!CODE_RE.test(code)) {
+      sendJson(res, 400, { error: 'invalid code' });
+      return;
+    }
+    try {
+      const fv = fairValueForCode(code);
+      if (!fv) {
+        sendJson(res, 404, { error: '公正価格を算出できません(業種PER・EPS・株価のいずれかが不足しています)' });
+        return;
+      }
+      sendJson(res, 200, { code, ...fv });
     } catch (err) {
       sendJson(res, 500, { error: err.message });
     }
@@ -657,6 +1001,100 @@ const server = http.createServer((req, res) => {
         if (div) dividends[sym.code] = div;
       }
       sendJson(res, 200, dividends);
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  if (pathname === '/api/dividend-summary') {
+    if (req.method !== 'GET') return methodNotAllowed(res);
+    try {
+      const master = loadMaster();
+      const holdings = [];
+      const missing = [];
+      for (const [code, quantity] of loadDividendQuantities()) {
+        const info = master.get(code);
+        const name = info ? info.CoName : code;
+        const div = computeAnnualDividendForCode(code);
+        if (!div) {
+          missing.push({ code, name, quantity });
+          continue;
+        }
+        const annualYen = div.perShare * quantity;
+        holdings.push({
+          code, name, quantity,
+          perShare: div.perShare, source: div.source, asOf: div.asOf,
+          annualYen, monthlyYen: annualYen / 12,
+        });
+      }
+      holdings.sort((a, b) => b.annualYen - a.annualYen || a.code.localeCompare(b.code));
+      const annualYen = holdings.reduce((s, h) => s + h.annualYen, 0);
+      sendJson(res, 200, { holdings, missing, totals: { annualYen, monthlyYen: annualYen / 12 } });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+
+  if (pathname === '/api/dividend-forecast') {
+    if (req.method !== 'GET') return methodNotAllowed(res);
+    try {
+      const master = loadMaster();
+      const quantities = loadDividendQuantities();
+      const baseYear = new Date().getFullYear();
+      const horizon = 20;
+      const codes = [];
+      const noHistory = []; // no dividend_hist/<code>.txt (or an empty one)
+      const tooFew = []; // some, but fewer than MIN_POINTS rows
+      let files = 0;
+      for (const [code, quantity] of quantities) {
+        const info = master.get(code);
+        const name = info ? info.CoName : code;
+        const history = loadDividendHistory(code);
+        if (history) files++;
+        if (!history || !history.length) {
+          noHistory.push({ code, name });
+          continue;
+        }
+        const forecast = buildForecast(history, quantity, baseYear, horizon);
+        if (!forecast) {
+          tooFew.push({ code, name, n: history.length });
+          continue;
+        }
+        codes.push({ code, name, quantity, history, price: latestClose(code), ...forecast });
+      }
+      // Biggest contributors first (by the far end of the horizon), so the
+      // page can show the top few and lump the rest.
+      codes.sort((a, b) => b.points[horizon].annualYen - a.points[horizon].annualYen || a.code.localeCompare(b.code));
+      const totals = [];
+      for (let n = 0; n <= horizon; n++) {
+        totals.push({
+          n,
+          year: baseYear + n,
+          annualYen: codes.reduce((s, c) => s + c.points[n].annualYen, 0),
+        });
+      }
+      // Reinvested-dividends scenario (see simulateReinvestment for the model).
+      const sim = simulateReinvestment(
+        codes.map((c) => ({ quantity: c.quantity, price: c.price ? c.price.close : null, points: c.points })),
+        horizon,
+      );
+      const priceDates = codes.map((c) => c.price && c.price.asOf).filter(Boolean).sort();
+      const reinvest = sim && {
+        model: 'constant_yield',
+        taxed: false,
+        targets: sim.targets,
+        priceAsOf: priceDates.length ? priceDates[priceDates.length - 1] : null,
+        totals: sim.totals.map((t) => ({ ...t, year: baseYear + t.n })),
+      };
+      sendJson(res, 200, {
+        baseYear, horizon, codes, totals, reinvest,
+        skipped: { noHistory, tooFew },
+        holdingCount: quantities.size,
+        minPoints: MIN_POINTS,
+        source: { kind: 'dividend_hist', files },
+      });
     } catch (err) {
       sendJson(res, 500, { error: err.message });
     }
